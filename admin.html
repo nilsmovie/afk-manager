@@ -1,0 +1,761 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8" />
+<title>Verwaltung - AFK Manager</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; }
+  :root {
+    --font-display: 'Space Grotesk', 'Inter', sans-serif;
+    --bg-body: #0f1115;
+    --bg-card: #171921;
+    --card-border: rgba(255, 255, 255, 0.07);
+    --text-main: #eef1f6;
+    --text-sub: #8a90a6;
+    --border-color: #33384a;
+    --border-row: rgba(255, 255, 255, 0.06);
+    --bg-input: #12141b;
+    --accent: #4f8cff;
+    --accent-strong: #6ea1ff;
+    --danger: #ef5b5b;
+    --danger-strong: #ff7b7b;
+    --owner-color: #ffcc66;
+    --admin-color: #6ea1ff;
+    --user-color: #8a90a6;
+  }
+  body {
+    font-family: 'Inter', -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+    background:
+      radial-gradient(ellipse 900px 500px at 20% -10%, rgba(79, 140, 255, 0.10), transparent 60%),
+      var(--bg-body);
+    background-attachment: fixed;
+    color: var(--text-main);
+    margin: 0;
+    padding: 24px;
+    min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
+  }
+  .top-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    flex-wrap: wrap;
+    gap: 12px;
+    max-width: 900px;
+    margin: 0 auto 20px auto;
+  }
+  h1 {
+    font-family: var(--font-display);
+    font-size: 24px;
+    font-weight: 700;
+    margin: 0 0 4px 0;
+  }
+  .sub { color: var(--text-sub); font-size: 13px; }
+  a.back-link {
+    color: var(--accent-strong);
+    text-decoration: none;
+    font-size: 13px;
+  }
+  a.back-link:hover { text-decoration: underline; }
+  .container { max-width: 900px; margin: 0 auto; }
+  .card {
+    background: var(--bg-card);
+    border: 1px solid var(--card-border);
+    border-radius: 14px;
+    padding: 20px;
+    margin-bottom: 18px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+  }
+  .card h2 {
+    font-family: var(--font-display);
+    font-size: 16px;
+    margin: 0 0 14px 0;
+    color: var(--text-sub);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  input, select {
+    width: 100%;
+    font-size: 14px;
+    padding: 9px 11px;
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+    background: var(--bg-input);
+    color: var(--text-main);
+    margin-bottom: 10px;
+    font-family: inherit;
+  }
+  input:focus, select:focus { outline: none; border-color: var(--accent); }
+  label.field-label {
+    font-size: 12px;
+    color: var(--text-sub);
+    display: block;
+    margin-bottom: 4px;
+  }
+  button {
+    cursor: pointer;
+    border: none;
+    font-family: var(--font-display);
+    font-weight: 600;
+    border-radius: 8px;
+    padding: 9px 14px;
+    font-size: 13px;
+    background: var(--accent);
+    color: white;
+    transition: background 0.15s ease;
+  }
+  button:hover { background: var(--accent-strong); }
+  button.danger { background: transparent; color: var(--danger); border: 1px solid var(--danger); }
+  button.danger:hover { background: rgba(239, 91, 91, 0.12); color: var(--danger-strong); }
+  button.ghost { background: transparent; color: var(--text-sub); border: 1px solid var(--border-color); }
+  button.ghost:hover { background: rgba(255,255,255,0.05); color: var(--text-main); }
+  button.small { padding: 6px 10px; font-size: 12px; }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  .account-checklist {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    max-height: 180px;
+    overflow-y: auto;
+    padding: 10px;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    background: var(--bg-input);
+    margin-bottom: 12px;
+  }
+  .account-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 5px 9px;
+    border-radius: 999px;
+    border: 1px solid var(--border-color);
+    font-size: 12.5px;
+    cursor: pointer;
+    user-select: none;
+  }
+  .account-chip input { display: none; }
+  .account-chip.checked {
+    background: color-mix(in srgb, var(--accent) 20%, transparent);
+    border-color: var(--accent);
+    color: var(--accent-strong);
+  }
+
+  .user-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--border-row);
+    flex-wrap: wrap;
+  }
+  .user-row:last-child { border-bottom: none; }
+  .user-info { display: flex; flex-direction: column; gap: 4px; min-width: 160px; }
+  .user-name { font-weight: 600; font-size: 14.5px; }
+  .role-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 600;
+    width: fit-content;
+  }
+  .role-badge.owner { background: rgba(255, 204, 102, 0.15); color: var(--owner-color); }
+  .role-badge.admin { background: rgba(110, 161, 255, 0.15); color: var(--admin-color); }
+  .role-badge.user { background: rgba(138, 144, 166, 0.15); color: var(--user-color); }
+  .allowed-list { font-size: 12px; color: var(--text-sub); }
+  .user-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+
+  .edit-panel {
+    display: none;
+    width: 100%;
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid var(--border-row);
+  }
+  .edit-panel.open { display: block; }
+  .error-msg { color: var(--danger); font-size: 13px; margin-bottom: 8px; min-height: 16px; }
+  .success-msg { color: #52e08a; font-size: 13px; margin-bottom: 8px; min-height: 16px; }
+  .error-msg:empty, .success-msg:empty { min-height: 0; margin: 0; }
+
+  /* ---------- Eigenes Meldungs-Popup (ersetzt alert()) ---------- */
+  .msg-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 10000;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    background: rgba(0, 0, 0, 0.55);
+    backdrop-filter: blur(3px);
+  }
+  .msg-overlay.open { display: flex; }
+  .msg-box {
+    width: 100%;
+    max-width: 420px;
+    background: var(--bg-card);
+    border: 1px solid var(--card-border);
+    border-top: 3px solid var(--accent);
+    border-radius: 14px;
+    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.45);
+    padding: 20px 22px 18px;
+    color: var(--text-main);
+  }
+  .msg-box.error { border-top-color: var(--danger); }
+  .msg-title { font-family: var(--font-display); font-size: 15px; font-weight: 700; margin: 0 0 8px; color: var(--text-main); }
+  .msg-box.error .msg-title { color: var(--danger); }
+  .msg-text { font-size: 14px; line-height: 1.5; color: var(--text-sub); white-space: pre-wrap; word-break: break-word; margin: 0 0 16px; }
+  .msg-input { display: block; margin: 0 0 16px; }
+  .msg-actions { display: flex; justify-content: flex-end; gap: 8px; }
+  .msg-actions button { padding: 8px 20px; border-radius: 999px; }
+  .msg-box button.msg-cancel { background: transparent; border: 1px solid var(--border-color); color: var(--text-sub); }
+  .msg-box button.msg-cancel:hover { background: rgba(255, 255, 255, 0.06); color: var(--text-main); }
+  .msg-box button.danger-fill { background: var(--danger); color: #fff; }
+  .msg-box button.danger-fill:hover { background: var(--danger-strong); }
+
+  /* ---------- Aktive Anmeldungen + Protokoll ---------- */
+  .card-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+  .card-head h2 { margin: 0; }
+  .session-row {
+    display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap;
+    padding: 10px 0; border-bottom: 1px solid var(--border-row);
+  }
+  .session-row:last-child { border-bottom: none; }
+  .session-main { display: flex; flex-direction: column; gap: 3px; }
+  .session-title { font-weight: 600; font-size: 14px; }
+  .session-meta { font-size: 12px; color: var(--text-sub); }
+  .this-device { color: #52e08a; font-size: 11.5px; font-weight: 600; margin-left: 6px; }
+  .log-tools { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+  .log-tools input { flex: 1 1 220px; margin: 0; }
+  .log-tools select { flex: 0 0 160px; margin: 0; width: auto; }
+  .log-wrap { max-height: 560px; overflow: auto; border: 1px solid var(--border-color); border-radius: 8px; }
+  table.log { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  table.log th {
+    position: sticky; top: 0; background: var(--bg-input); color: var(--text-sub); text-align: left;
+    font-weight: 600; padding: 8px 10px; border-bottom: 1px solid var(--border-color); white-space: nowrap;
+  }
+  table.log td { padding: 7px 10px; border-bottom: 1px solid var(--border-row); vertical-align: top; }
+  table.log tr:last-child td { border-bottom: none; }
+  table.log td.time { white-space: nowrap; color: var(--text-sub); font-family: 'JetBrains Mono', monospace; font-size: 11.5px; }
+  table.log td.where { color: var(--text-sub); font-size: 12px; }
+  table.log .warn { color: var(--danger-strong); }
+  .src-badge { display: inline-block; padding: 1px 7px; border-radius: 999px; font-size: 10.5px; font-weight: 600; margin-right: 4px; }
+  .src-badge.web { background: rgba(79, 140, 255, 0.15); color: var(--accent-strong); }
+  .src-badge.discord { background: rgba(88, 101, 242, 0.18); color: #a5adff; }
+  .log-detail { color: var(--text-sub); word-break: break-word; }
+  .log-empty { padding: 14px; color: var(--text-sub); font-size: 13px; }
+</style>
+</head>
+<body>
+
+<div class="top-bar">
+  <div>
+    <h1>⚙️ Benutzerverwaltung</h1>
+    <div class="sub">AFK Manager - clashsmp.de</div>
+  </div>
+  <div style="text-align:right;">
+    <a href="/" class="back-link">← Zurück zum Dashboard</a><br/>
+    <span class="sub" id="myInfo"></span>
+  </div>
+</div>
+
+<div class="container">
+
+  <div class="card">
+    <h2>Neuen Benutzer anlegen</h2>
+    <div class="error-msg" id="createError"></div>
+    <label class="field-label">Benutzername</label>
+    <input id="newUserName" placeholder="z.B. Max" />
+    <label class="field-label">Passwort</label>
+    <input id="newUserPassword" type="password" placeholder="Mindestens 8 Zeichen" />
+    <label class="field-label">Rolle</label>
+    <select id="newUserRole">
+      <option value="user">User (nur zugewiesene Accounts)</option>
+      <option value="admin" id="adminRoleOption">Admin (alles außer Benutzerverwaltung von Admins)</option>
+    </select>
+    <div id="newUserAccountsWrap">
+      <label class="field-label">Sichtbare/bedienbare Minecraft-Accounts</label>
+      <div class="account-checklist" id="newUserAccountChecklist"></div>
+    </div>
+    <button onclick="createUser()">+ Benutzer anlegen</button>
+  </div>
+
+  <div class="card">
+    <h2>Bestehende Benutzer</h2>
+    <div id="userList"></div>
+  </div>
+
+  <div class="card">
+    <h2>Mein Passwort ändern</h2>
+    <div class="error-msg" id="pwError"></div>
+    <div class="success-msg" id="pwSuccess"></div>
+    <label class="field-label">Aktuelles Passwort</label>
+    <input id="pwCurrent" type="password" autocomplete="current-password" />
+    <label class="field-label">Neues Passwort (mindestens 8 Zeichen)</label>
+    <input id="pwNew" type="password" autocomplete="new-password" />
+    <label class="field-label">Neues Passwort wiederholen</label>
+    <input id="pwRepeat" type="password" autocomplete="new-password" />
+    <div class="sub" style="margin-bottom:10px">Danach werden alle anderen Geräte, auf denen du angemeldet bist, abgemeldet.</div>
+    <button onclick="changeOwnPassword()">Passwort ändern</button>
+  </div>
+
+  <div class="card owner-only" style="display:none">
+    <div class="card-head">
+      <h2 id="sessionsTitle">Aktive Anmeldungen</h2>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        <button class="small ghost" onclick="loadSessions()">Aktualisieren</button>
+        <button class="small danger" onclick="endOtherSessions()">Alle anderen abmelden</button>
+      </div>
+    </div>
+    <div class="sub" id="sessionsHint" style="margin-bottom:8px"></div>
+    <div id="sessionList"></div>
+  </div>
+
+  <div class="card owner-only" style="display:none">
+    <div class="card-head">
+      <h2>Protokoll</h2>
+      <button class="small ghost" onclick="loadAudit()">Aktualisieren</button>
+    </div>
+    <div class="sub" style="margin-bottom:10px">Wer hat wann was gemacht – auf der Webseite und in Discord. Neueste oben.</div>
+    <div class="log-tools">
+      <input id="logFilter" placeholder="Suchen: Name, Account, IP, Aktion …" />
+      <select id="logSource">
+        <option value="">Alles</option>
+        <option value="web">Nur Webseite</option>
+        <option value="discord">Nur Discord</option>
+      </select>
+    </div>
+    <div class="log-wrap"><div id="logTable"></div></div>
+    <div style="margin-top:10px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <button class="small ghost" id="logMoreBtn" onclick="loadAudit(2000)">Ältere laden</button>
+      <span class="sub" id="logCount"></span>
+    </div>
+  </div>
+
+</div>
+
+<div class="msg-overlay" id="msgOverlay" role="dialog" aria-modal="true" aria-labelledby="msgTitle" aria-describedby="msgText">
+  <div class="msg-box" id="msgBox">
+    <h3 class="msg-title" id="msgTitle">Hinweis</h3>
+    <p class="msg-text" id="msgText"></p>
+    <input type="text" class="msg-input" id="msgInput" autocomplete="off" spellcheck="false" style="display:none">
+    <div class="msg-actions">
+      <button type="button" class="msg-cancel" id="msgCancel" style="display:none">Abbrechen</button>
+      <button type="button" id="msgOk">OK</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ---------- Eigene Dialoge (statt Browser-alert/confirm/prompt) ----------
+const msgOverlay = document.getElementById('msgOverlay');
+const msgBox = document.getElementById('msgBox');
+const msgTitleEl = document.getElementById('msgTitle');
+const msgTextEl = document.getElementById('msgText');
+const msgInput = document.getElementById('msgInput');
+const msgOkBtn = document.getElementById('msgOk');
+const msgCancelBtn = document.getElementById('msgCancel');
+let msgReturnFocus = null;
+let msgResolve = null; // Aufloeser des gerade offenen Dialogs
+let msgMode = 'alert';
+
+function finishDialog(ok) {
+  if (!msgOverlay.classList.contains('open')) return;
+  const resolve = msgResolve;
+  const mode = msgMode;
+  const value = msgInput.value;
+  msgResolve = null;
+  msgOverlay.classList.remove('open');
+  if (msgReturnFocus && typeof msgReturnFocus.focus === 'function') {
+    try { msgReturnFocus.focus(); } catch (e) { /* egal */ }
+  }
+  msgReturnFocus = null;
+  if (!resolve) return;
+  if (mode === 'prompt') resolve(ok ? value : null);
+  else if (mode === 'confirm') resolve(!!ok);
+  else resolve(true);
+}
+
+function openDialog({ mode, text, title, isError = false, defaultValue = '', okLabel = 'OK', danger = false }) {
+  // Ist schon ein Dialog offen, wird er als "abgebrochen" beendet
+  if (msgOverlay.classList.contains('open')) finishDialog(false);
+  msgReturnFocus = document.activeElement;
+  msgMode = mode;
+  msgBox.classList.toggle('error', (mode === 'alert' && !!isError) || !!danger);
+  msgTitleEl.textContent = title || (mode === 'alert' ? (isError ? 'Fehler' : 'Hinweis') : (mode === 'confirm' ? 'Bestätigen' : 'Eingabe'));
+  msgTextEl.textContent = String(text); // textContent: kein HTML moeglich
+  msgInput.style.display = mode === 'prompt' ? 'block' : 'none';
+  msgInput.value = mode === 'prompt' ? String(defaultValue) : '';
+  msgCancelBtn.style.display = mode === 'alert' ? 'none' : '';
+  msgOkBtn.textContent = okLabel;
+  msgOkBtn.classList.toggle('danger-fill', !!danger);
+  msgOverlay.classList.add('open');
+  if (mode === 'prompt') { msgInput.focus(); msgInput.select(); }
+  else if (mode === 'confirm' && danger) msgCancelBtn.focus(); // Enter loescht nicht versehentlich
+  else msgOkBtn.focus();
+  return new Promise((resolve) => { msgResolve = resolve; });
+}
+
+function showMessage(text, isError = true) { openDialog({ mode: 'alert', text, isError }); }
+function showConfirm(text, opts = {}) { return openDialog({ mode: 'confirm', text, ...opts }); }
+function showPrompt(text, defaultValue = '', opts = {}) { return openDialog({ mode: 'prompt', text, defaultValue, ...opts }); }
+
+msgOkBtn.addEventListener('click', () => finishDialog(true));
+msgCancelBtn.addEventListener('click', () => finishDialog(false));
+msgOverlay.addEventListener('click', (e) => { if (e.target === msgOverlay) finishDialog(false); });
+document.addEventListener('keydown', (e) => {
+  if (!msgOverlay.classList.contains('open')) return;
+  if (e.key === 'Escape') { e.preventDefault(); finishDialog(false); return; }
+  if (e.key === 'Enter' && e.target === msgInput) { e.preventDefault(); finishDialog(true); return; }
+  if (e.key === 'Tab') {
+    // Fokus im Dialog halten
+    const items = [msgInput, msgCancelBtn, msgOkBtn].filter((el) => el.getClientRects().length > 0);
+    if (!items.length) return;
+    const first = items[0];
+    const last = items[items.length - 1];
+    if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+    else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+  }
+});
+
+let myRole = null;
+let myUsername = null;
+let allAccounts = []; // alle Minecraft-Account-Namen
+let allUsers = [];
+
+async function init() {
+  const meRes = await fetch('/api/me');
+  if (!meRes.ok) { window.location.href = '/login'; return; }
+  const me = await meRes.json();
+  myRole = me.role;
+  myUsername = me.username;
+
+  if (myRole !== 'owner' && myRole !== 'admin') {
+    window.location.href = '/';
+    return;
+  }
+
+  document.getElementById('myInfo').textContent = `Eingeloggt als ${myUsername} (${myRole === 'owner' ? 'Owner' : 'Admin'})`;
+
+  if (myRole !== 'owner') {
+    document.getElementById('adminRoleOption').remove();
+  }
+
+  const accRes = await fetch('/api/accounts');
+  allAccounts = accRes.ok ? (await accRes.json()).map((a) => a.username) : [];
+
+  renderChecklist(document.getElementById('newUserAccountChecklist'), []);
+
+  await loadUsers();
+  // Aktive Anmeldungen und Protokoll gibt es nur fuer den Owner
+  if (myRole === 'owner') {
+    document.querySelectorAll('.owner-only').forEach((el) => { el.style.display = ''; });
+    loadSessions();
+    loadAudit();
+  }
+}
+
+function renderChecklist(container, selected) {
+  container.innerHTML = '';
+  if (allAccounts.length === 0) {
+    container.innerHTML = '<span class="sub">Keine Minecraft-Accounts vorhanden.</span>';
+    return;
+  }
+  allAccounts.forEach((name) => {
+    const label = document.createElement('label');
+    label.className = 'account-chip' + (selected.includes(name) ? ' checked' : '');
+    label.innerHTML = `<input type="checkbox" value="${escapeHtml(name)}" ${selected.includes(name) ? 'checked' : ''}/> ${escapeHtml(name)}`;
+    label.querySelector('input').addEventListener('change', (e) => {
+      label.classList.toggle('checked', e.target.checked);
+    });
+    container.appendChild(label);
+  });
+}
+
+function getCheckedValues(container) {
+  return Array.from(container.querySelectorAll('input[type="checkbox"]:checked')).map((el) => el.value);
+}
+
+async function createUser() {
+  const errorEl = document.getElementById('createError');
+  errorEl.textContent = '';
+  const username = document.getElementById('newUserName').value.trim();
+  const password = document.getElementById('newUserPassword').value;
+  const role = document.getElementById('newUserRole').value;
+  const allowedAccounts = getCheckedValues(document.getElementById('newUserAccountChecklist'));
+
+  if (!username || !password) {
+    errorEl.textContent = 'Benutzername und Passwort werden benötigt.';
+    return;
+  }
+
+  const res = await fetch('/api/users', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username, password, role, allowedAccounts }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    errorEl.textContent = data.error || 'Fehler beim Anlegen';
+    return;
+  }
+
+  document.getElementById('newUserName').value = '';
+  document.getElementById('newUserPassword').value = '';
+  document.getElementById('newUserRole').value = 'user';
+  renderChecklist(document.getElementById('newUserAccountChecklist'), []);
+  await loadUsers();
+}
+
+async function loadUsers() {
+  const res = await fetch('/api/users');
+  if (!res.ok) return;
+  allUsers = await res.json();
+  renderUserList();
+}
+
+function renderUserList() {
+  const wrap = document.getElementById('userList');
+  wrap.innerHTML = '';
+
+  allUsers.forEach((u) => {
+    // Kann der aktuell eingeloggte Benutzer diesen Eintrag bearbeiten/löschen?
+    // Owner darf Admins und User bearbeiten (nicht sich selbst/den Owner).
+    // Admin darf NUR normale User bearbeiten, keine anderen Admins/den Owner.
+    const canEdit = u.role !== 'owner' && (myRole === 'owner' || u.role === 'user');
+
+    const row = document.createElement('div');
+    row.className = 'user-row';
+
+    const allowedText = u.role === 'user'
+      ? (u.allowedAccounts.length > 0 ? u.allowedAccounts.join(', ') : '(keine Accounts zugewiesen)')
+      : 'Voller Zugriff auf alle Accounts';
+
+    row.innerHTML = `
+      <div class="user-info">
+        <span class="user-name">${escapeHtml(u.username)}</span>
+        <span class="role-badge ${escapeHtml(u.role)}">${u.role === 'owner' ? 'Owner' : u.role === 'admin' ? 'Admin' : 'User'}</span>
+        <span class="allowed-list">${escapeHtml(allowedText)}</span>
+      </div>
+      <div class="user-actions">
+        ${canEdit ? `<button class="small ghost" onclick="toggleEdit(${jsArg(u.username)})">Bearbeiten</button>` : ''}
+        ${canEdit ? `<button class="small danger" onclick="deleteUser(${jsArg(u.username)})">Löschen</button>` : ''}
+      </div>
+      ${canEdit ? `
+      <div class="edit-panel" id="edit-${escapeHtml(u.username)}">
+        <div class="error-msg" id="editError-${escapeHtml(u.username)}"></div>
+        <div class="success-msg" id="editSuccess-${escapeHtml(u.username)}"></div>
+        <label class="field-label">Neues Passwort (leer lassen, um es nicht zu ändern)</label>
+        <input type="password" id="editPassword-${escapeHtml(u.username)}" placeholder="Neues Passwort" />
+        ${u.role === 'user' ? `
+          <label class="field-label">Sichtbare/bedienbare Minecraft-Accounts</label>
+          <div class="account-checklist" id="editChecklist-${escapeHtml(u.username)}"></div>
+        ` : ''}
+        <button class="small" onclick="saveUserEdit(${jsArg(u.username)})">Speichern</button>
+      </div>` : ''}
+    `;
+    wrap.appendChild(row);
+
+    if (canEdit && u.role === 'user') {
+      renderChecklist(document.getElementById(`editChecklist-${u.username}`), u.allowedAccounts);
+    }
+  });
+
+  if (allUsers.length === 0) {
+    wrap.innerHTML = '<span class="sub">Keine Benutzer vorhanden.</span>';
+  }
+}
+
+function toggleEdit(username) {
+  const panel = document.getElementById(`edit-${username}`);
+  if (panel) panel.classList.toggle('open');
+}
+
+async function saveUserEdit(username) {
+  const errorEl = document.getElementById(`editError-${username}`);
+  const successEl = document.getElementById(`editSuccess-${username}`);
+  errorEl.textContent = '';
+  successEl.textContent = '';
+
+  const passwordEl = document.getElementById(`editPassword-${username}`);
+  const checklistEl = document.getElementById(`editChecklist-${username}`);
+
+  const body = {};
+  if (passwordEl && passwordEl.value) body.password = passwordEl.value;
+  if (checklistEl) body.allowedAccounts = getCheckedValues(checklistEl);
+
+  const res = await fetch(`/api/users/${encodeURIComponent(username)}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    errorEl.textContent = data.error || 'Fehler beim Speichern';
+    return;
+  }
+  successEl.textContent = 'Gespeichert.';
+  if (passwordEl) passwordEl.value = '';
+  await loadUsers();
+}
+
+async function deleteUser(username) {
+  const confirmed = await showConfirm(`"${username}" wirklich löschen?`, {
+    title: 'Benutzer löschen',
+    okLabel: 'Löschen',
+    danger: true,
+  });
+  if (!confirmed) return;
+  const res = await fetch(`/api/users/${encodeURIComponent(username)}`, { method: 'DELETE' });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    showMessage(data.error || 'Fehler beim Löschen');
+    return;
+  }
+  await loadUsers();
+}
+
+// Text sicher in HTML einsetzen - auch in Attribute (deshalb auch " und ')
+function escapeHtml(str) {
+  return String(str ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+// Wert sicher als Argument in onclick="..." einsetzen
+function jsArg(v) {
+  return escapeHtml(JSON.stringify(String(v ?? '')));
+}
+
+function fmtTime(ts) {
+  const d = new Date(ts);
+  if (isNaN(d)) return '';
+  return d.toLocaleString('de-DE', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' });
+}
+function fmtAgo(ms) {
+  const s = Math.max(0, Math.round((Date.now() - ms) / 1000));
+  if (s < 60) return 'gerade eben';
+  if (s < 3600) return `vor ${Math.round(s / 60)} Min.`;
+  if (s < 86400) return `vor ${Math.round(s / 3600)} Std.`;
+  return `vor ${Math.round(s / 86400)} Tagen`;
+}
+
+// ---------- Eigenes Passwort ----------
+async function changeOwnPassword() {
+  const err = document.getElementById('pwError');
+  const ok = document.getElementById('pwSuccess');
+  err.textContent = ''; ok.textContent = '';
+  const currentPassword = document.getElementById('pwCurrent').value;
+  const newPassword = document.getElementById('pwNew').value;
+  const repeat = document.getElementById('pwRepeat').value;
+  if (!currentPassword || !newPassword) { err.textContent = 'Bitte aktuelles und neues Passwort eingeben.'; return; }
+  if (newPassword !== repeat) { err.textContent = 'Die beiden neuen Passwörter stimmen nicht überein.'; return; }
+  const res = await fetch('/api/me/password', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ currentPassword, newPassword }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) { err.textContent = data.error || 'Fehler beim Ändern'; return; }
+  ok.textContent = `Passwort geändert.${data.ended ? ` ${data.ended} andere(s) Gerät(e) abgemeldet.` : ''}`;
+  ['pwCurrent', 'pwNew', 'pwRepeat'].forEach((id) => { document.getElementById(id).value = ''; });
+  if (myRole === 'owner') { loadSessions(); loadAudit(); }
+}
+
+// ---------- Aktive Anmeldungen ----------
+async function loadSessions() {
+  const wrap = document.getElementById('sessionList');
+  const res = await fetch('/api/sessions');
+  if (!res.ok) { wrap.innerHTML = '<span class="sub">Konnte nicht geladen werden.</span>'; return; }
+  const { sessions } = await res.json();
+  document.getElementById('sessionsHint').textContent = 'Alle Geräte, die gerade im Dashboard angemeldet sind (ein Neustart des Managers meldet alle ab).';
+  if (!sessions.length) { wrap.innerHTML = '<span class="sub">Keine.</span>'; return; }
+  wrap.innerHTML = sessions.map((s) => {
+    const ip = s.lastIp && s.lastIp !== s.ip ? `${s.ip} → zuletzt ${s.lastIp}` : s.ip;
+    return `<div class="session-row">
+      <div class="session-main">
+        <span class="session-title">${escapeHtml(s.username)} · ${escapeHtml(s.device)}${s.current ? '<span class="this-device">dieses Gerät</span>' : ''}</span>
+        <span class="session-meta">IP ${escapeHtml(ip)} · angemeldet ${escapeHtml(fmtTime(s.createdAt))} · zuletzt aktiv ${escapeHtml(fmtAgo(s.lastSeen))}</span>
+      </div>
+      ${s.current ? '' : `<button class="small danger" onclick="endSession(${jsArg(s.id)})">Abmelden</button>`}
+    </div>`;
+  }).join('');
+}
+
+async function endSession(id) {
+  const res = await fetch(`/api/sessions/${encodeURIComponent(id)}`, { method: 'DELETE' });
+  if (!res.ok) { const d = await res.json().catch(() => ({})); showMessage(d.error || 'Fehler'); }
+  loadSessions();
+  loadAudit();
+}
+
+async function endOtherSessions() {
+  const confirmed = await showConfirm('Alle anderen Geräte abmelden – auch die von anderen Benutzern? Du selbst bleibst angemeldet.', { title: 'Abmelden', okLabel: 'Abmelden', danger: true });
+  if (!confirmed) return;
+  const res = await fetch('/api/sessions/end-others', { method: 'POST' });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) { showMessage(data.error || 'Fehler'); return; }
+  showMessage(`${data.ended} Anmeldung(en) beendet.`, false);
+  loadSessions();
+  loadAudit();
+}
+
+// ---------- Protokoll ----------
+let auditEntries = [];
+const WARN_ACTIONS = /abgelehnt|fehlgeschlagen|gelöscht|Benutzer|Passwort|abgemeldet|umbenannt|angelegt|ausgeführt/i;
+
+async function loadAudit(limit = 500) {
+  const res = await fetch(`/api/audit?limit=${limit}`);
+  if (!res.ok) { document.getElementById('logTable').innerHTML = '<div class="log-empty">Konnte nicht geladen werden.</div>'; return; }
+  auditEntries = (await res.json()).entries || [];
+  document.getElementById('logMoreBtn').style.display = limit >= 2000 ? 'none' : '';
+  renderAudit();
+}
+
+function auditWhere(e) {
+  if (e.src === 'web') return `<span class="src-badge web">Web</span>${escapeHtml(e.ip || '')}${e.device ? `<br>${escapeHtml(e.device)}` : ''}`;
+  if (e.src === 'discord') return `<span class="src-badge discord">Discord</span>${e.channel ? escapeHtml('#' + e.channel) : ''}`;
+  return escapeHtml(e.src || '');
+}
+
+function renderAudit() {
+  const q = document.getElementById('logFilter').value.trim().toLowerCase();
+  const src = document.getElementById('logSource').value;
+  const list = auditEntries.filter((e) => {
+    if (src && e.src !== src) return false;
+    if (!q) return true;
+    return [e.who, e.action, e.target, e.detail, e.ip, e.device, e.channel].some((v) => v && String(v).toLowerCase().includes(q));
+  });
+  document.getElementById('logCount').textContent = `${list.length} von ${auditEntries.length} Einträgen`;
+  const el = document.getElementById('logTable');
+  if (!list.length) { el.innerHTML = '<div class="log-empty">Keine Einträge.</div>'; return; }
+  el.innerHTML = `<table class="log"><thead><tr><th>Zeit</th><th>Wer</th><th>Wo</th><th>Was</th></tr></thead><tbody>${
+    list.map((e) => `<tr>
+      <td class="time">${escapeHtml(fmtTime(e.ts))}</td>
+      <td>${escapeHtml(e.who || '?')}${e.role ? `<br><span class="sub">${escapeHtml(e.role)}</span>` : ''}</td>
+      <td class="where">${auditWhere(e)}</td>
+      <td><span class="${WARN_ACTIONS.test(e.action || '') ? 'warn' : ''}">${escapeHtml(e.action || '')}</span>${e.target ? ` <strong>${escapeHtml(e.target)}</strong>` : ''}${e.detail ? `<div class="log-detail">${escapeHtml(e.detail)}</div>` : ''}</td>
+    </tr>`).join('')
+  }</tbody></table>`;
+}
+
+document.getElementById('logFilter').addEventListener('input', renderAudit);
+document.getElementById('logSource').addEventListener('change', renderAudit);
+
+document.getElementById('newUserRole').addEventListener('change', (e) => {
+  document.getElementById('newUserAccountsWrap').style.display = e.target.value === 'user' ? '' : 'none';
+});
+
+init();
+</script>
+</body>
+</html>

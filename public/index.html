@@ -1,0 +1,2225 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8" />
+<title>AFK Manager - clashsmp.de</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&family=Orbitron:wght@600;700;800;900&family=Rajdhani:wght@600;700&family=Bebas+Neue&family=Chakra+Petch:wght@600;700&family=Press+Start+2P&family=Audiowide&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --font-display: 'Space Grotesk', 'Inter', sans-serif;
+    --bg-body: #0f1115;
+    --bg-body-glow: radial-gradient(ellipse 900px 500px at 20% -10%, rgba(79, 140, 255, 0.10), transparent 60%);
+    --bg-card: #171921;
+    --card-border: rgba(255, 255, 255, 0.07);
+    --card-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+    --text-main: #eef1f6;
+    --text-sub: #8a90a6;
+    --text-heading: #a7aec4;
+    --border-color: #33384a;
+    --border-row: rgba(255, 255, 255, 0.06);
+    --bg-input: #12141b;
+    --input-text: #eef1f6;
+    --accent: #4f8cff;
+    --accent-strong: #6ea1ff;
+    --accent-text: #ffffff;
+    --danger: #ef5b5b;
+    --chatlog-bg: #0b0c11;
+    --chat-time-color: #6fb1ff;
+    --status-online-bg: rgba(46, 204, 113, 0.14);
+    --status-online-text: #52e08a;
+    --status-online-dot: #34d97a;
+    --status-off-bg: rgba(255, 255, 255, 0.06);
+    --status-off-text: #9aa0b4;
+    --status-off-dot: #6b7186;
+    --status-other-bg: rgba(245, 166, 35, 0.14);
+    --status-other-text: #f6b94f;
+    --status-other-dot: #f5a623;
+    --tab-chip-bg: rgba(79, 140, 255, 0.12);
+    --tab-chip-text: #bcd4ff;
+    --tab-chip-border: rgba(79, 140, 255, 0.35);
+    --msa-bg: rgba(245, 166, 35, 0.10);
+    --msa-border: rgba(245, 166, 35, 0.35);
+  }
+
+  html[data-theme="purple"] {
+    --bg-body: #150f1c;
+    --bg-body-glow: radial-gradient(ellipse 900px 500px at 20% -10%, rgba(155, 89, 245, 0.12), transparent 60%);
+    --bg-card: #201a2c;
+    --card-border: rgba(255, 255, 255, 0.07);
+    --accent: #9b59f5;
+    --accent-strong: #b07dfa;
+    --chatlog-bg: #120d18;
+    --chat-time-color: #c9a3ff;
+    --status-online-dot: #34d97a;
+    --status-off-dot: #7b7191;
+    --status-other-dot: #f5a623;
+    --tab-chip-bg: rgba(155, 89, 245, 0.14);
+    --tab-chip-text: #dfc7ff;
+    --tab-chip-border: rgba(155, 89, 245, 0.4);
+    --msa-bg: rgba(245, 166, 35, 0.10);
+    --msa-border: rgba(245, 166, 35, 0.35);
+  }
+
+  html[data-theme="green"] {
+    --bg-body: #0d1713;
+    --bg-body-glow: radial-gradient(ellipse 900px 500px at 20% -10%, rgba(46, 204, 159, 0.12), transparent 60%);
+    --bg-card: #17221d;
+    --card-border: rgba(255, 255, 255, 0.07);
+    --accent: #2ecc9f;
+    --accent-strong: #4fe0b7;
+    --accent-text: #06231a;
+    --chatlog-bg: #0b120f;
+    --chat-time-color: #7bdbc0;
+    --status-online-dot: #34d97a;
+    --status-off-dot: #5f7a70;
+    --status-other-dot: #f5a623;
+    --tab-chip-bg: rgba(46, 204, 159, 0.14);
+    --tab-chip-text: #b8f0dc;
+    --tab-chip-border: rgba(46, 204, 159, 0.4);
+    --msa-bg: rgba(245, 166, 35, 0.10);
+    --msa-border: rgba(245, 166, 35, 0.35);
+  }
+
+  html[data-theme="red"] {
+    --bg-body: #180f0f;
+    --bg-body-glow: radial-gradient(ellipse 900px 500px at 20% -10%, rgba(255, 107, 82, 0.12), transparent 60%);
+    --bg-card: #241919;
+    --card-border: rgba(255, 255, 255, 0.07);
+    --accent: #ff6b52;
+    --accent-strong: #ff8a70;
+    --chatlog-bg: #140d0d;
+    --chat-time-color: #ff9d82;
+    --status-online-dot: #34d97a;
+    --status-off-dot: #8a6f6b;
+    --status-other-dot: #f5a623;
+    --tab-chip-bg: rgba(255, 107, 82, 0.14);
+    --tab-chip-text: #ffcfc2;
+    --tab-chip-border: rgba(255, 107, 82, 0.4);
+    --msa-bg: rgba(245, 166, 35, 0.10);
+    --msa-border: rgba(245, 166, 35, 0.35);
+  }
+
+  html[data-theme="light"] {
+    --bg-body: #f0f1f5;
+    --bg-body-glow: radial-gradient(ellipse 900px 500px at 20% -10%, rgba(79, 140, 255, 0.06), transparent 60%);
+    --bg-card: #ffffff;
+    --card-border: rgba(20, 25, 40, 0.08);
+    --card-shadow: 0 10px 30px rgba(30, 35, 60, 0.08);
+    --text-main: #1e1f26;
+    --text-sub: #666d80;
+    --text-heading: #4a5066;
+    --border-color: #d8d8de;
+    --border-row: #e9e9ee;
+    --bg-input: #f7f7f9;
+    --input-text: #1e1f26;
+    --accent: #3d7bfd;
+    --accent-strong: #5c92ff;
+    --accent-text: #ffffff;
+    --chatlog-bg: #f4f5f9;
+    --chat-time-color: #2f6fd1;
+    --status-online-bg: #dff5e4;
+    --status-online-text: #1f8f4e;
+    --status-online-dot: #22b25c;
+    --status-off-bg: #eceef2;
+    --status-off-text: #666d80;
+    --status-off-dot: #9aa0b4;
+    --status-other-bg: #fbe7c2;
+    --status-other-text: #8a6412;
+    --status-other-dot: #d68f14;
+    --tab-chip-bg: #e6ecfb;
+    --tab-chip-text: #2f4f9c;
+    --tab-chip-border: #b9c9f0;
+    --msa-bg: #fdf3d9;
+    --msa-border: #e0c477;
+  }
+
+  html[data-theme="orange"] {
+    --bg-body: #180f0a;
+    --bg-body-glow: radial-gradient(ellipse 900px 500px at 20% -10%, rgba(255, 159, 64, 0.13), transparent 60%);
+    --bg-card: #241811;
+    --card-border: rgba(255, 255, 255, 0.07);
+    --accent: #ff9f40;
+    --accent-strong: #ffb666;
+    --accent-text: #241400;
+    --chatlog-bg: #140d09;
+    --chat-time-color: #ffc588;
+    --status-online-dot: #34d97a;
+    --status-off-dot: #8a7a6b;
+    --status-other-dot: #f5a623;
+    --tab-chip-bg: rgba(255, 159, 64, 0.15);
+    --tab-chip-text: #ffd4a3;
+    --tab-chip-border: rgba(255, 159, 64, 0.4);
+    --msa-bg: rgba(245, 166, 35, 0.10);
+    --msa-border: rgba(245, 166, 35, 0.35);
+  }
+
+  html[data-theme="cyan"] {
+    --bg-body: #08161a;
+    --bg-body-glow: radial-gradient(ellipse 900px 500px at 20% -10%, rgba(34, 211, 238, 0.13), transparent 60%);
+    --bg-card: #0f2126;
+    --card-border: rgba(255, 255, 255, 0.07);
+    --accent: #22d3ee;
+    --accent-strong: #5fe3f5;
+    --accent-text: #052a2f;
+    --chatlog-bg: #08171b;
+    --chat-time-color: #7de8fa;
+    --status-online-dot: #34d97a;
+    --status-off-dot: #5c8087;
+    --status-other-dot: #f5a623;
+    --tab-chip-bg: rgba(34, 211, 238, 0.14);
+    --tab-chip-text: #a6ecfa;
+    --tab-chip-border: rgba(34, 211, 238, 0.4);
+    --msa-bg: rgba(245, 166, 35, 0.10);
+    --msa-border: rgba(245, 166, 35, 0.35);
+  }
+
+  html[data-theme="pink"] {
+    --bg-body: #180d15;
+    --bg-body-glow: radial-gradient(ellipse 900px 500px at 20% -10%, rgba(255, 95, 168, 0.13), transparent 60%);
+    --bg-card: #241420;
+    --card-border: rgba(255, 255, 255, 0.07);
+    --accent: #ff5fa8;
+    --accent-strong: #ff85c0;
+    --accent-text: #2b0619;
+    --chatlog-bg: #150b12;
+    --chat-time-color: #ffa8d4;
+    --status-online-dot: #34d97a;
+    --status-off-dot: #8a6b7c;
+    --status-other-dot: #f5a623;
+    --tab-chip-bg: rgba(255, 95, 168, 0.15);
+    --tab-chip-text: #ffc2e2;
+    --tab-chip-border: rgba(255, 95, 168, 0.4);
+    --msa-bg: rgba(245, 166, 35, 0.10);
+    --msa-border: rgba(245, 166, 35, 0.35);
+  }
+
+  html[data-theme="mono"] {
+    --bg-body: #0c0c0d;
+    --bg-body-glow: radial-gradient(ellipse 900px 500px at 20% -10%, rgba(255, 255, 255, 0.06), transparent 60%);
+    --bg-card: #17171a;
+    --card-border: rgba(255, 255, 255, 0.09);
+    --accent: #e4e6ec;
+    --accent-strong: #ffffff;
+    --accent-text: #101114;
+    --chatlog-bg: #09090a;
+    --chat-time-color: #b8bcc8;
+    --status-online-dot: #34d97a;
+    --status-off-dot: #7a7d87;
+    --status-other-dot: #f5a623;
+    --tab-chip-bg: rgba(255, 255, 255, 0.10);
+    --tab-chip-text: #e4e6ec;
+    --tab-chip-border: rgba(255, 255, 255, 0.28);
+    --msa-bg: rgba(255, 255, 255, 0.06);
+    --msa-border: rgba(255, 255, 255, 0.25);
+  }
+
+  /* ---------- Schriftarten (unabhaengig vom Farbschema waehlbar) ---------- */
+  html[data-font="orbitron"] { --font-display: 'Orbitron', 'Inter', sans-serif; }
+  html[data-font="rajdhani"] { --font-display: 'Rajdhani', 'Inter', sans-serif; }
+  html[data-font="bebas"] { --font-display: 'Bebas Neue', 'Inter', sans-serif; }
+  html[data-font="chakra"] { --font-display: 'Chakra Petch', 'Inter', sans-serif; }
+  html[data-font="audiowide"] { --font-display: 'Audiowide', 'Inter', sans-serif; }
+  html[data-font="press-start"] { --font-display: 'Press Start 2P', 'JetBrains Mono', monospace; }
+
+  * { box-sizing: border-box; }
+  body {
+    font-family: 'Inter', -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+    background:
+      var(--bg-body-glow),
+      var(--bg-body);
+    background-attachment: fixed;
+    color: var(--text-main);
+    margin: 0;
+    padding: 24px;
+    -webkit-font-smoothing: antialiased;
+  }
+  h1 {
+    font-family: var(--font-display);
+    font-size: 22px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    margin: 0 0 2px 0;
+  }
+  .sub { color: var(--text-sub); font-size: 13px; }
+  .top-bar {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 14px;
+    margin-bottom: 18px;
+  }
+  .status-strip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 8px;
+    padding: 4px 10px 4px 8px;
+    background: var(--bg-card);
+    border: 1px solid var(--card-border);
+    border-radius: 999px;
+    font-size: 12px;
+    color: var(--text-heading);
+    width: fit-content;
+  }
+  .status-strip .dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--status-online-dot);
+    animation: pulse-dot 2s ease-in-out infinite;
+  }
+  @keyframes pulse-dot {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.35; }
+  }
+  .picker-group {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 8px;
+  }
+  .theme-picker {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .theme-picker label {
+    font-size: 12px;
+    color: var(--text-sub);
+  }
+  .theme-picker select {
+    width: auto;
+    margin-bottom: 0;
+    padding: 7px 10px;
+    font-size: 13px;
+  }
+
+  /* ---------- Konto-Leiste: Benutzer, Verwaltung, Abmelden ---------- */
+  .account-bar {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .user-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 5px 11px 5px 9px;
+    background: var(--bg-card);
+    border: 1px solid var(--card-border);
+    border-radius: 999px;
+    font-size: 12px;
+    color: var(--text-heading);
+    white-space: nowrap;
+  }
+  .user-chip svg { color: var(--text-sub); flex-shrink: 0; }
+  .user-chip .role-tag {
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--accent-strong);
+  }
+  .nav-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 13px;
+    border-radius: 999px;
+    font-family: var(--font-display);
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    line-height: 1.2;
+    text-decoration: none;
+    cursor: pointer;
+    transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease, transform 0.1s ease;
+  }
+  .nav-pill svg { flex-shrink: 0; }
+  .nav-pill:active { transform: translateY(1px); }
+  .nav-pill:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 35%, transparent);
+  }
+  .nav-pill.accent {
+    background: color-mix(in srgb, var(--accent) 14%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent) 42%, transparent);
+    color: var(--accent-strong);
+  }
+  .nav-pill.accent:hover {
+    background: color-mix(in srgb, var(--accent) 24%, transparent);
+    border-color: var(--accent);
+  }
+  .nav-pill.neutral {
+    background: transparent;
+    border: 1px solid var(--border-color);
+    color: var(--text-sub);
+  }
+  .nav-pill.neutral:hover {
+    background: color-mix(in srgb, var(--text-sub) 10%, transparent);
+    color: var(--text-main);
+  }
+  .layout {
+    display: grid;
+    grid-template-columns: 340px 1fr;
+    gap: 20px;
+  }
+  .card {
+    background: var(--bg-card);
+    border: 1px solid var(--card-border);
+    box-shadow: var(--card-shadow);
+    border-radius: 16px;
+    padding: 20px;
+    margin-bottom: 18px;
+  }
+  .card h2 {
+    font-family: var(--font-display);
+    font-size: 13px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin: 0 0 14px 0;
+    color: var(--text-heading);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .card h2::before {
+    content: '';
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--accent);
+    flex-shrink: 0;
+  }
+  .accounts-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 14px;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .accounts-header h2 { margin: 0; }
+  input, select, button {
+    font-family: inherit;
+    font-size: 14px;
+    padding: 10px 12px;
+    border-radius: 9px;
+    border: 1px solid var(--border-color);
+    background: var(--bg-input);
+    color: var(--input-text);
+    transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease, transform 0.1s ease;
+  }
+  input, select { width: 100%; margin-bottom: 10px; }
+  input:focus, select:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent);
+  }
+  input::placeholder { color: var(--text-sub); }
+  button {
+    cursor: pointer;
+    background: var(--accent);
+    border: 1px solid transparent;
+    color: var(--accent-text);
+    font-weight: 600;
+    font-family: var(--font-display);
+    letter-spacing: 0.01em;
+  }
+  button:hover { background: var(--accent-strong); }
+  button:active { transform: translateY(1px); }
+  button:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 35%, transparent);
+  }
+  button.stop {
+    background: transparent;
+    border-color: color-mix(in srgb, var(--danger) 45%, transparent);
+    color: var(--danger);
+  }
+  button.stop:hover { background: color-mix(in srgb, var(--danger) 14%, transparent); }
+  button.ghost {
+    background: transparent;
+    border-color: var(--border-color);
+    color: var(--text-sub);
+  }
+  button.ghost:hover {
+    background: color-mix(in srgb, var(--danger) 14%, transparent);
+    border-color: color-mix(in srgb, var(--danger) 45%, transparent);
+    color: var(--danger);
+  }
+  button.small {
+    padding: 6px 10px;
+    font-size: 12px;
+    border-radius: 999px;
+    margin-left: 0;
+  }
+  button.icon-btn {
+    padding: 5px 7px;
+    font-size: 12px;
+    line-height: 1;
+    border-radius: 999px;
+  }
+  .account-row {
+    padding: 12px 0;
+    border-bottom: 1px solid var(--border-row);
+  }
+  .account-row:last-child { border-bottom: none; }
+  /* Einheitliche Account-Karte - immer gleich aufgebaut, egal welcher Status/Typ:
+     Zeile 1: Name + Abzeichen links, Status rechts
+     Zeile 2: feste Button-Plaetze (nicht passende Buttons bleiben ausgegraut stehen)
+     Zeile 3: Uptime-Balken */
+  .account-name-line {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 9px;
+    min-width: 0;
+  }
+  .account-name-line strong {
+    font-size: 14.5px;
+    font-weight: 600;
+    flex: 0 0 auto;
+    max-width: 60%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .account-name-line .primary-badge { flex-shrink: 0; white-space: nowrap; }
+  /* Bei Platzmangel wird zuerst der Status gekuerzt (voller Text als Tooltip), nicht der Name */
+  .account-name-line .status {
+    margin-left: auto;
+    flex: 0 50 auto;
+    min-width: 0;
+    white-space: nowrap;
+  }
+  .status .status-text { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+  .account-buttons {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+  .account-buttons .btn-group {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .account-buttons button.small { min-width: 58px; height: 28px; padding: 0 10px; }
+  .account-buttons button.icon-btn {
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+  }
+  .account-buttons button:disabled { opacity: 0.3; cursor: not-allowed; transform: none; }
+  .account-buttons button.ghost:disabled:hover {
+    background: transparent;
+    border-color: var(--border-color);
+    color: var(--text-sub);
+  }
+  /* Stern beim Account, der gerade Chat-Quelle ist: hervorgehoben statt weggelassen */
+  .account-buttons button.star-active:disabled,
+  .account-buttons button.star-active:disabled:hover {
+    opacity: 1;
+    cursor: default;
+    color: var(--accent-strong);
+    background: color-mix(in srgb, var(--accent) 14%, transparent);
+    border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+  }
+  .account-buttons button.notify-off { opacity: 0.55; }
+  .uptime-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 8px;
+  }
+  .uptime-bar {
+    flex: 1;
+    height: 4px;
+    background: var(--border-row);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  .uptime-fill {
+    height: 100%;
+    background: var(--accent);
+    border-radius: 4px;
+    transition: width 0.4s ease;
+  }
+  .autochat-area {
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid var(--border-row);
+  }
+  .autochat-list { margin-bottom: 8px; }
+  .autochat-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    padding: 4px 0;
+    border-bottom: 1px solid var(--border-row);
+  }
+  .autochat-item:last-child { border-bottom: none; }
+  .autochat-item .tag {
+    background: color-mix(in srgb, var(--accent) 15%, transparent);
+    color: var(--accent-strong);
+    border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+    border-radius: 999px;
+    padding: 1px 7px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    white-space: nowrap;
+  }
+  .autochat-item .delay-tag {
+    background: var(--status-off-bg);
+    color: var(--text-sub);
+    border-radius: 999px;
+    padding: 1px 7px;
+    font-size: 11px;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+  .autochat-item .text { flex: 1; color: var(--text-main); font-family: 'JetBrains Mono', monospace; font-size: 11.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .autochat-add-row {
+    display: flex;
+    gap: 6px;
+    align-items: flex-end;
+    flex-wrap: wrap;
+    margin-top: 6px;
+  }
+  .autochat-add-row input { margin-bottom: 0; font-size: 12px; padding: 6px 8px; }
+  .autochat-text-input { flex: 1; min-width: 120px; }
+  .autochat-delay-input { width: 72px; flex-shrink: 0; }
+
+  .uptime-text {
+    font-size: 11px;
+    color: var(--text-sub);
+    white-space: nowrap;
+    flex-shrink: 0;
+    min-width: 78px; /* feste Breite -> Balken endet bei allen Accounts an derselben Stelle */
+    text-align: right;
+  }
+  .status {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    font-weight: 500;
+    padding: 4px 10px 4px 8px;
+    border-radius: 999px;
+  }
+  .status::before {
+    content: '';
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .status.online { background: var(--status-online-bg); color: var(--status-online-text); }
+  .status.online::before { background: var(--status-online-dot); }
+  .status.gestoppt { background: var(--status-off-bg); color: var(--status-off-text); }
+  .status.gestoppt::before { background: var(--status-off-dot); }
+  .status.other { background: var(--status-other-bg); color: var(--status-other-text); }
+  .status.queue { background: rgba(138, 99, 255, 0.14); color: #a97fff; }
+  .status.queue::before { background: #8a63ff; }
+  .status.other::before { background: var(--status-other-dot); animation: pulse-dot 1.4s ease-in-out infinite; }
+  .primary-badge {
+    font-size: 10.5px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    background: color-mix(in srgb, var(--accent) 16%, transparent);
+    color: var(--accent-strong);
+    border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
+    padding: 2px 8px;
+    border-radius: 999px;
+  }
+  .toggle-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+  }
+  .chat-header-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-bottom: 14px;
+  }
+  .chat-tools {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .chat-tools input {
+    width: 180px;
+    margin-bottom: 0;
+    font-size: 12.5px;
+    padding: 7px 10px;
+  }
+  #chatlog {
+    height: 400px;
+    overflow-y: auto;
+    background: var(--chatlog-bg);
+    border: 1px solid var(--card-border);
+    border-radius: 12px;
+    padding: 14px;
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-size: 12.5px;
+    line-height: 1.6;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  #chatlog::-webkit-scrollbar { width: 8px; }
+  #chatlog::-webkit-scrollbar-track { background: transparent; }
+  #chatlog::-webkit-scrollbar-thumb {
+    background: var(--border-color);
+    border-radius: 8px;
+  }
+  .chat-line { margin-bottom: 5px; }
+  .chat-user { color: var(--chat-time-color); opacity: 0.85; }
+  .chat-off {
+    color: var(--text-sub);
+    font-style: italic;
+    padding: 10px;
+  }
+  .send-row { display: flex; gap: 8px; margin-top: 12px; }
+  .send-row select { width: 100px; flex-shrink: 0; margin-bottom: 0; font-size: 12px; padding: 10px 6px; }
+  .send-row input { margin-bottom: 0; flex: 1; min-width: 0; }
+  .send-row button { margin-bottom: 0; flex-shrink: 0; }
+  #tabBtn {
+    background: transparent;
+    border-color: var(--border-color);
+    color: var(--text-sub);
+    padding: 8px 14px;
+    font-weight: bold;
+  }
+  #tabBtn:hover {
+    background: color-mix(in srgb, var(--accent) 14%, transparent);
+    border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+    color: var(--accent-strong);
+  }
+  .tab-suggestions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 10px;
+  }
+  .tab-chip {
+    background: var(--tab-chip-bg);
+    color: var(--tab-chip-text);
+    border: 1px solid var(--tab-chip-border);
+    border-radius: 999px;
+    padding: 5px 13px;
+    font-size: 12.5px;
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    cursor: pointer;
+    transition: background 0.15s ease, transform 0.1s ease;
+  }
+  .tab-chip:hover, .tab-chip.active {
+    background: var(--accent);
+    color: var(--accent-text);
+    border-color: var(--accent);
+  }
+  .msa-box {
+    background: var(--msa-bg);
+    border: 1px solid var(--msa-border);
+    border-left: 3px solid var(--status-other-dot);
+    border-radius: 10px;
+    padding: 14px 16px;
+    margin-bottom: 14px;
+  }
+  .msa-box a {
+    color: var(--chat-time-color);
+    font-weight: bold;
+  }
+  .msa-code {
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-size: 18px;
+    letter-spacing: 0.04em;
+    background: var(--chatlog-bg);
+    border: 1px solid var(--card-border);
+    padding: 5px 10px;
+    border-radius: 6px;
+    display: inline-block;
+    margin: 6px 0;
+  }
+
+  .cat-card { text-align: center; }
+  .cat-stage {
+    position: relative;
+    display: flex;
+    justify-content: center;
+    padding-top: 10px;
+    transition: transform 0.32s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+  .cat-svg {
+    width: 130px;
+    height: auto;
+    cursor: pointer;
+    user-select: none;
+    animation: cat-breathe 3.2s ease-in-out infinite;
+    transform-origin: 60px 90px;
+  }
+  @keyframes cat-breathe {
+    0%, 100% { transform: scaleY(1); }
+    50% { transform: scaleY(1.03); }
+  }
+  .cat-svg:hover { filter: brightness(1.05); }
+  .cat-svg.cat-bounce { animation: cat-bounce 0.5s ease; }
+  @keyframes cat-bounce {
+    0% { transform: translateY(0) scale(1); }
+    30% { transform: translateY(-14px) scale(1.04); }
+    55% { transform: translateY(0) scale(0.98); }
+    75% { transform: translateY(-4px) scale(1.01); }
+    100% { transform: translateY(0) scale(1); }
+  }
+  .cat-body { fill: #e0a862; }
+  .cat-paw { fill: #e0a862; }
+  .cat-head { fill: #eab876; }
+  .cat-ear { fill: #e0a862; }
+  .cat-ear-inner { fill: #f5c2c2; }
+  .cat-nose { fill: #f08a9c; }
+  .cat-mouth { fill: none; stroke: #6b4a34; stroke-width: 1.6; stroke-linecap: round; }
+  .cat-tear { fill: none; stroke: #6fb1ff; stroke-width: 2; stroke-linecap: round; }
+  .cat-svg.sad .cat-mouth-happy { display: none !important; }
+  .cat-svg.sad .cat-mouth-sad { display: block !important; }
+  .cat-svg.sad .cat-tear { display: block !important; animation: cat-tear-fall 1.2s ease-in infinite; }
+  @keyframes cat-tear-fall {
+    0% { opacity: 0; transform: translateY(0); }
+    30% { opacity: 1; }
+    100% { opacity: 0; transform: translateY(6px); }
+  }
+  .cat-whisker { stroke: #ffffff; stroke-width: 1.3; opacity: 0.8; }
+  .cat-eye-white { fill: #fffaf2; }
+  .cat-pupil { fill: #2b2118; transition: transform 0.08s ease; }
+  .cat-tail {
+    fill: #e0a862;
+    transform-origin: 18px 96px;
+    animation: cat-tail-wag 2.4s ease-in-out infinite;
+  }
+  @keyframes cat-tail-wag {
+    0%, 100% { transform: rotate(14deg); }
+    50% { transform: rotate(-6deg); }
+  }
+  html[data-theme="purple"] .cat-body, html[data-theme="purple"] .cat-paw, html[data-theme="purple"] .cat-ear, html[data-theme="purple"] .cat-tail { fill: #b28fd6; }
+  html[data-theme="purple"] .cat-head { fill: #c4a3e8; }
+  html[data-theme="green"] .cat-body, html[data-theme="green"] .cat-paw, html[data-theme="green"] .cat-ear, html[data-theme="green"] .cat-tail { fill: #7fb894; }
+  html[data-theme="green"] .cat-head { fill: #93cca8; }
+  html[data-theme="red"] .cat-body, html[data-theme="red"] .cat-paw, html[data-theme="red"] .cat-ear, html[data-theme="red"] .cat-tail { fill: #d68f7c; }
+  html[data-theme="red"] .cat-head { fill: #e5a690; }
+  html[data-theme="orange"] .cat-body, html[data-theme="orange"] .cat-paw, html[data-theme="orange"] .cat-ear, html[data-theme="orange"] .cat-tail { fill: #d69a5c; }
+  html[data-theme="orange"] .cat-head { fill: #e5b378; }
+  html[data-theme="cyan"] .cat-body, html[data-theme="cyan"] .cat-paw, html[data-theme="cyan"] .cat-ear, html[data-theme="cyan"] .cat-tail { fill: #6bb8c4; }
+  html[data-theme="cyan"] .cat-head { fill: #85cdd8; }
+  html[data-theme="pink"] .cat-body, html[data-theme="pink"] .cat-paw, html[data-theme="pink"] .cat-ear, html[data-theme="pink"] .cat-tail { fill: #d67fa8; }
+  html[data-theme="pink"] .cat-head { fill: #e594bd; }
+  html[data-theme="mono"] .cat-body, html[data-theme="mono"] .cat-paw, html[data-theme="mono"] .cat-ear, html[data-theme="mono"] .cat-tail { fill: #9a9ba3; }
+  html[data-theme="mono"] .cat-head { fill: #b5b6be; }
+  html[data-theme="mono"] .cat-ear-inner { fill: #6b6c74; }
+  html[data-theme="light"] .cat-whisker { stroke: #c8c8ce; }
+
+  .cat-bubble {
+    position: absolute;
+    top: -6px;
+    left: 50%;
+    transform: translateX(-50%) scale(0.85);
+    background: var(--bg-card);
+    border: 1px solid var(--card-border);
+    color: var(--text-main);
+    font-size: 12.5px;
+    font-family: var(--font-display);
+    padding: 5px 12px;
+    border-radius: 999px;
+    white-space: nowrap;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s ease, transform 0.2s ease;
+    box-shadow: var(--card-shadow);
+  }
+  .cat-bubble.show {
+    opacity: 1;
+    transform: translateX(-50%) scale(1);
+  }
+
+  .roam-strip {
+    position: relative;
+    width: 100%;
+    height: 44px;
+    margin-top: 10px;
+    overflow: hidden;
+    pointer-events: none;
+  }
+  .roam-cat {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 60px;
+    height: 34px;
+    will-change: transform;
+  }
+  .roam-cat svg { width: 100%; height: 100%; display: block; }
+  .rc-body, .rc-head, .rc-ear { fill: #e0a862; }
+  .rc-eye { fill: #2b2118; }
+  .rc-leg { fill: #c9925a; transform-origin: top center; animation: rc-walk 0.5s ease-in-out infinite; }
+  .rc-leg1 { animation-delay: 0s; }
+  .rc-leg2 { animation-delay: 0.25s; }
+  .rc-leg3 { animation-delay: 0.12s; }
+  .rc-leg4 { animation-delay: 0.37s; }
+  @keyframes rc-walk {
+    0%, 100% { transform: rotate(-14deg); }
+    50% { transform: rotate(14deg); }
+  }
+  .rc-tail {
+    fill: none;
+    stroke: #e0a862;
+    stroke-width: 4;
+    stroke-linecap: round;
+    transform-origin: 12px 20px;
+    animation: rc-tailwag 0.9s ease-in-out infinite;
+  }
+  @keyframes rc-tailwag {
+    0%, 100% { transform: rotate(0deg); }
+    50% { transform: rotate(-12deg); }
+  }
+  html[data-theme="purple"] .rc-body, html[data-theme="purple"] .rc-head, html[data-theme="purple"] .rc-ear { fill: #b28fd6; }
+  html[data-theme="purple"] .rc-tail { stroke: #b28fd6; }
+  html[data-theme="green"] .rc-body, html[data-theme="green"] .rc-head, html[data-theme="green"] .rc-ear { fill: #7fb894; }
+  html[data-theme="green"] .rc-tail { stroke: #7fb894; }
+  html[data-theme="red"] .rc-body, html[data-theme="red"] .rc-head, html[data-theme="red"] .rc-ear { fill: #d68f7c; }
+  html[data-theme="red"] .rc-tail { stroke: #d68f7c; }
+  html[data-theme="orange"] .rc-body, html[data-theme="orange"] .rc-head, html[data-theme="orange"] .rc-ear { fill: #d69a5c; }
+  html[data-theme="orange"] .rc-tail { stroke: #d69a5c; }
+  html[data-theme="cyan"] .rc-body, html[data-theme="cyan"] .rc-head, html[data-theme="cyan"] .rc-ear { fill: #6bb8c4; }
+  html[data-theme="cyan"] .rc-tail { stroke: #6bb8c4; }
+  html[data-theme="pink"] .rc-body, html[data-theme="pink"] .rc-head, html[data-theme="pink"] .rc-ear { fill: #d67fa8; }
+  html[data-theme="pink"] .rc-tail { stroke: #d67fa8; }
+  html[data-theme="mono"] .rc-body, html[data-theme="mono"] .rc-head, html[data-theme="mono"] .rc-ear { fill: #9a9ba3; }
+  html[data-theme="mono"] .rc-tail { stroke: #9a9ba3; }
+
+  .control-account-select {
+    width: 100%;
+    margin-bottom: 12px;
+  }
+  .control-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 6px;
+    max-width: 220px;
+    margin: 0 auto 14px auto;
+  }
+  .ctrl-btn {
+    padding: 14px 0;
+    font-size: 15px;
+    font-weight: 700;
+    user-select: none;
+    -webkit-user-select: none;
+    touch-action: none;
+  }
+  .ctrl-btn:active, .ctrl-btn.active {
+    background: var(--accent-strong);
+  }
+  .control-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    justify-content: center;
+    margin-bottom: 14px;
+  }
+  .hotbar-row {
+    display: grid;
+    grid-template-columns: repeat(9, 1fr);
+    gap: 4px;
+  }
+  .hotbar-btn {
+    padding: 8px 0;
+    font-size: 12px;
+    text-align: center;
+  }
+
+  .cat-control-row {
+    display: block;
+  }
+  .cat-control-row > .card {
+    margin-bottom: 16px;
+  }
+
+  @media (min-width: 900px) {
+    .layout {
+      grid-template-columns: 380px 1fr;
+    }
+    .cat-control-row {
+      display: flex;
+      gap: 16px;
+      align-items: flex-start;
+    }
+    .cat-control-row > .card {
+      flex: 1;
+      min-width: 0;
+    }
+  }
+
+  @media (max-width: 800px) {
+    body { padding: 14px; }
+    .layout {
+      grid-template-columns: 1fr;
+    }
+    #chatlog { height: 300px; }
+  }
+
+  @media (max-width: 480px) {
+    .send-row { flex-wrap: wrap; }
+
+    .send-row input { flex: 1 1 100%; order: -1; margin-bottom: 6px; }
+  }
+
+  /* ---------- Eigenes Meldungs-Popup (ersetzt alert()) ---------- */
+  .msg-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 10000;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    background: rgba(0, 0, 0, 0.55);
+    backdrop-filter: blur(3px);
+  }
+  .msg-overlay.open { display: flex; animation: msgFade 0.15s ease-out; }
+  .msg-box {
+    width: 100%;
+    max-width: 420px;
+    background: var(--bg-card);
+    border: 1px solid var(--card-border);
+    border-top: 3px solid var(--accent);
+    border-radius: 14px;
+    box-shadow: var(--card-shadow), 0 20px 50px rgba(0, 0, 0, 0.45);
+    padding: 20px 22px 18px;
+    color: var(--text-main);
+    animation: msgPop 0.18s ease-out;
+  }
+  .msg-box.error { border-top-color: var(--danger); }
+  .msg-title {
+    font-family: var(--font-display);
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    margin: 0 0 8px;
+    color: var(--text-main);
+  }
+  .msg-box.error .msg-title { color: var(--danger); }
+  .msg-text {
+    font-size: 14px;
+    line-height: 1.5;
+    color: var(--text-sub);
+    white-space: pre-wrap;
+    word-break: break-word;
+    margin: 0 0 16px;
+  }
+  .msg-actions { display: flex; justify-content: flex-end; gap: 8px; }
+  .msg-actions button { padding: 8px 20px; border-radius: 999px; }
+  .msg-input { display: block; margin: 0 0 16px; }
+  .msg-box button.msg-cancel {
+    background: transparent;
+    border-color: var(--border-color);
+    color: var(--text-sub);
+  }
+  .msg-box button.msg-cancel:hover {
+    background: color-mix(in srgb, var(--text-main) 8%, transparent);
+    color: var(--text-main);
+  }
+  .msg-box button.danger-fill { background: var(--danger); color: #fff; }
+  .msg-box button.danger-fill:hover { background: color-mix(in srgb, var(--danger) 82%, #fff); }
+  @keyframes msgFade { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes msgPop { from { transform: translateY(8px) scale(0.97); opacity: 0; } to { transform: none; opacity: 1; } }
+  @media (prefers-reduced-motion: reduce) {
+    .msg-overlay.open, .msg-box { animation: none; }
+  }
+</style>
+</head>
+
+<body>
+
+<div class="top-bar">
+  <div>
+    <h1>AFK Manager</h1>
+    <div class="sub">Zielserver: clashsmp.de</div>
+    <div class="status-strip" id="statusStrip">
+      <span class="dot"></span>
+      <span id="statusStripText">– / – online</span>
+    </div>
+  </div>
+  <div class="picker-group">
+    <div class="theme-picker">
+      <label for="themeSelect">Farbschema:</label>
+      <select id="themeSelect">
+        <option value="dark">Blau (Standard)</option>
+        <option value="purple">Lila</option>
+        <option value="green">Grün</option>
+        <option value="red">Rot</option>
+        <option value="orange">Orange</option>
+        <option value="cyan">Cyan</option>
+        <option value="pink">Pink</option>
+        <option value="mono">Mono</option>
+        <option value="light">Hell</option>
+      </select>
+    </div>
+    <div class="theme-picker">
+      <label for="fontSelect">Schriftart:</label>
+      <select id="fontSelect">
+        <option value="default">Space Grotesk (Standard)</option>
+        <option value="orbitron">Orbitron</option>
+        <option value="rajdhani">Rajdhani</option>
+        <option value="bebas">Bebas Neue</option>
+        <option value="chakra">Chakra Petch</option>
+        <option value="audiowide">Audiowide</option>
+        <option value="press-start">Press Start 2P (Retro)</option>
+      </select>
+    </div>
+    <div class="account-bar" id="accountBadgeWrap" style="display:none;">
+      <span class="user-chip">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+        <span id="myUsernameLabel"></span>
+        <span class="role-tag" id="myRoleTag"></span>
+      </span>
+      <a href="/admin" class="nav-pill accent" id="adminLink" style="display:none;">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="21" x2="14" y1="4" y2="4"/><line x1="10" x2="3" y1="4" y2="4"/><line x1="21" x2="12" y1="12" y2="12"/><line x1="8" x2="3" y1="12" y2="12"/><line x1="21" x2="16" y1="20" y2="20"/><line x1="12" x2="3" y1="20" y2="20"/><line x1="14" x2="14" y1="2" y2="6"/><line x1="8" x2="8" y1="10" y2="14"/><line x1="16" x2="16" y1="18" y2="22"/></svg>
+        Verwaltung
+      </a>
+      <button class="nav-pill neutral" id="logoutBtn" type="button">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" x2="9" y1="12" y2="12"/></svg>
+        Abmelden
+      </button>
+    </div>
+  </div>
+</div>
+
+<div id="msaContainer"></div>
+
+<div class="layout">
+  <div>
+    <div class="card" id="addAccountCard">
+      <h2>Account hinzufügen</h2>
+      <input id="newUsername" placeholder="Minecraft-Benutzername" />
+      <button id="addAccountBtn">Hinzufügen</button>
+      <div class="sub" style="margin-top:8px;">
+        Nach dem Start erscheint hier oben ein Microsoft-Login-Code, den du bestätigen musst.
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="accounts-header">
+        <h2 style="margin:0;">Accounts</h2>
+        <div class="account-buttons">
+          <button class="small" onclick="startAllAccounts()">Alle starten</button>
+          <button class="small stop" onclick="stopAllAccounts()">Alle stoppen</button>
+        </div>
+      </div>
+      <div id="accountList"></div>
+    </div>
+  </div>
+
+  <div>
+    <div class="card">
+      <div class="chat-header-row">
+        <h2 style="margin:0;">Chat <span id="chatPrimaryInfo" class="sub"></span></h2>
+        <div class="chat-tools">
+          <input id="chatSearch" placeholder="Suche im Verlauf..." />
+          <button class="icon-btn ghost" id="exportChatBtn" title="Verlauf exportieren">⬇</button>
+        </div>
+      </div>
+      <div id="chatlog"></div>
+      <div class="send-row">
+        <select id="chatAccountSelect"></select>
+        <input id="chatInput" placeholder="Nachricht oder /befehl" />
+        <button id="tabBtn" title="Vervollständigen (wie Tab)">⇥</button>
+        <button id="sendChatBtn">Senden</button>
+      </div>
+      <div id="tabSuggestions" class="tab-suggestions"></div>
+    </div>
+
+    <div class="cat-control-row">
+      <div class="card">
+        <h2>Steuerung</h2>
+        <select id="controlAccountSelect" class="control-account-select"></select>
+
+        <div class="control-grid">
+          <div></div>
+          <button class="ctrl-btn" id="ctrlForward" title="Vorwärts">W</button>
+          <div></div>
+          <button class="ctrl-btn" id="ctrlLeft" title="Links">A</button>
+          <button class="ctrl-btn" id="ctrlJump" title="Springen">⤒</button>
+          <button class="ctrl-btn" id="ctrlRight" title="Rechts">D</button>
+          <div></div>
+          <button class="ctrl-btn" id="ctrlBack" title="Rückwärts">S</button>
+          <div></div>
+        </div>
+
+        <div class="control-row">
+          <button class="small" id="ctrlSneak">Schleichen</button>
+          <button class="small ghost" id="ctrlDismount">Absteigen</button>
+          <button class="small" id="ctrlLeftclick">Linksklick</button>
+          <button class="small" id="ctrlRightclick">Rechtsklick</button>
+          <button class="small ghost" id="ctrlDrop">Drop</button>
+          <button class="small ghost" id="ctrlDropAll">Drop Stack</button>
+        </div>
+
+        <div class="hotbar-row" id="hotbarRow"></div>
+      </div>
+
+      <div class="card cat-card">
+        <h2>Katzenpause</h2>
+        <div class="cat-stage" id="catStage">
+          <div class="cat-bubble" id="catBubble"></div>
+          <svg id="catSvg" class="cat-svg" viewBox="0 0 120 110" xmlns="http://www.w3.org/2000/svg">
+            <ellipse class="cat-tail" cx="18" cy="86" rx="8" ry="26" transform="rotate(20 18 86)"/>
+            <g class="cat-body-group">
+              <ellipse class="cat-body" cx="60" cy="82" rx="34" ry="22"/>
+              <ellipse class="cat-paw" cx="42" cy="100" rx="7" ry="6"/>
+              <ellipse class="cat-paw" cx="78" cy="100" rx="7" ry="6"/>
+              <g class="cat-head-group">
+                <polygon class="cat-ear" points="34,38 44,10 54,40"/>
+                <polygon class="cat-ear-inner" points="38,34 43,18 49,35"/>
+                <polygon class="cat-ear" points="86,38 76,10 66,40"/>
+                <polygon class="cat-ear-inner" points="82,34 77,18 71,35"/>
+                <circle class="cat-head" cx="60" cy="48" r="30"/>
+                <g class="cat-eye-l">
+                  <circle class="cat-eye-white" cx="48" cy="46" r="7"/>
+                  <circle class="cat-pupil" cx="48" cy="46" r="3.2"/>
+                </g>
+                <g class="cat-eye-r">
+                  <circle class="cat-eye-white" cx="72" cy="46" r="7"/>
+                  <circle class="cat-pupil" cx="72" cy="46" r="3.2"/>
+                </g>
+                <polygon class="cat-nose" points="60,54 56,60 64,60"/>
+                <path class="cat-mouth cat-mouth-happy" d="M60,60 Q54,68 46,62 M60,60 Q66,68 74,62" />
+                <path class="cat-mouth cat-mouth-sad" d="M60,62 Q54,58 46,64 M60,62 Q66,58 74,64" style="display:none" />
+                <path class="cat-tear" d="M44,50 q-3,5 0,9" style="display:none" />
+                <path class="cat-tear cat-tear-r" d="M76,50 q3,5 0,9" style="display:none" />
+                <line class="cat-whisker" x1="14" y1="50" x2="36" y2="52"/>
+                <line class="cat-whisker" x1="14" y1="58" x2="36" y2="58"/>
+                <line class="cat-whisker" x1="84" y1="52" x2="106" y2="50"/>
+                <line class="cat-whisker" x1="84" y1="58" x2="106" y2="58"/>
+              </g>
+            </g>
+          </svg>
+        </div>
+        <div class="sub" style="text-align:center; margin-top:6px;">Klick mich</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="roam-strip" id="roamStrip">
+  <div class="roam-cat" id="roamCat">
+    <svg viewBox="0 0 60 34" xmlns="http://www.w3.org/2000/svg">
+      <path class="rc-tail" d="M12,20 Q0,10 6,2"/>
+      <ellipse class="rc-body" cx="30" cy="20" rx="18" ry="9"/>
+      <rect class="rc-leg rc-leg1" x="16" y="26" width="4" height="8" rx="2"/>
+      <rect class="rc-leg rc-leg2" x="24" y="26" width="4" height="8" rx="2"/>
+      <rect class="rc-leg rc-leg3" x="34" y="26" width="4" height="8" rx="2"/>
+      <rect class="rc-leg rc-leg4" x="42" y="26" width="4" height="8" rx="2"/>
+      <circle class="rc-head" cx="50" cy="14" r="8"/>
+      <polygon class="rc-ear" points="46,8 48,2 51,8"/>
+      <polygon class="rc-ear" points="53,8 55,2 57,9"/>
+      <circle class="rc-eye" cx="53" cy="13" r="1.3"/>
+    </svg>
+  </div>
+</div>
+
+<!-- Eigener Dialog (ersetzt die Browser-Fenster alert/confirm/prompt) -->
+<div class="msg-overlay" id="msgOverlay" role="dialog" aria-modal="true" aria-labelledby="msgTitle" aria-describedby="msgText">
+  <div class="msg-box" id="msgBox">
+    <h3 class="msg-title" id="msgTitle">Hinweis</h3>
+    <p class="msg-text" id="msgText"></p>
+    <input type="text" class="msg-input" id="msgInput" autocomplete="off" spellcheck="false" style="display:none">
+    <div class="msg-actions">
+      <button type="button" class="msg-cancel" id="msgCancel" style="display:none">Abbrechen</button>
+      <button type="button" id="msgOk">OK</button>
+    </div>
+  </div>
+</div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script>
+// ---------- Eigene Dialoge (statt Browser-alert/confirm/prompt) ----------
+const msgOverlay = document.getElementById('msgOverlay');
+const msgBox = document.getElementById('msgBox');
+const msgTitleEl = document.getElementById('msgTitle');
+const msgTextEl = document.getElementById('msgText');
+const msgInput = document.getElementById('msgInput');
+const msgOkBtn = document.getElementById('msgOk');
+const msgCancelBtn = document.getElementById('msgCancel');
+let msgReturnFocus = null;
+let msgResolve = null; // Aufloeser des gerade offenen Dialogs
+let msgMode = 'alert';
+
+function finishDialog(ok) {
+  if (!msgOverlay.classList.contains('open')) return;
+  const resolve = msgResolve;
+  const mode = msgMode;
+  const value = msgInput.value;
+  msgResolve = null;
+  msgOverlay.classList.remove('open');
+  if (msgReturnFocus && typeof msgReturnFocus.focus === 'function') {
+    try { msgReturnFocus.focus(); } catch (e) { /* egal */ }
+  }
+  msgReturnFocus = null;
+  if (!resolve) return;
+  if (mode === 'prompt') resolve(ok ? value : null);
+  else if (mode === 'confirm') resolve(!!ok);
+  else resolve(true);
+}
+
+function openDialog({ mode, text, title, isError = false, defaultValue = '', okLabel = 'OK', danger = false }) {
+  // Ist schon ein Dialog offen, wird er als "abgebrochen" beendet
+  if (msgOverlay.classList.contains('open')) finishDialog(false);
+  msgReturnFocus = document.activeElement;
+  msgMode = mode;
+  msgBox.classList.toggle('error', (mode === 'alert' && !!isError) || !!danger);
+  msgTitleEl.textContent = title || (mode === 'alert' ? (isError ? 'Fehler' : 'Hinweis') : (mode === 'confirm' ? 'Bestätigen' : 'Eingabe'));
+  msgTextEl.textContent = String(text); // textContent: kein HTML moeglich
+  msgInput.style.display = mode === 'prompt' ? 'block' : 'none';
+  msgInput.value = mode === 'prompt' ? String(defaultValue) : '';
+  msgCancelBtn.style.display = mode === 'alert' ? 'none' : '';
+  msgOkBtn.textContent = okLabel;
+  msgOkBtn.classList.toggle('danger-fill', !!danger);
+  msgOverlay.classList.add('open');
+  if (mode === 'prompt') { msgInput.focus(); msgInput.select(); }
+  else if (mode === 'confirm' && danger) msgCancelBtn.focus(); // Enter loescht nicht versehentlich
+  else msgOkBtn.focus();
+  return new Promise((resolve) => { msgResolve = resolve; });
+}
+
+// Meldung (ersetzt alert). isError = true -> rote Variante, sonst neutraler Hinweis
+function showMessage(text, isError = true) { openDialog({ mode: 'alert', text, isError }); }
+// Ja/Nein-Frage (ersetzt confirm) -> Promise<boolean>
+function showConfirm(text, opts = {}) { return openDialog({ mode: 'confirm', text, ...opts }); }
+// Texteingabe (ersetzt prompt) -> Promise<string | null> (null = abgebrochen)
+function showPrompt(text, defaultValue = '', opts = {}) { return openDialog({ mode: 'prompt', text, defaultValue, ...opts }); }
+
+msgOkBtn.addEventListener('click', () => finishDialog(true));
+msgCancelBtn.addEventListener('click', () => finishDialog(false));
+msgOverlay.addEventListener('click', (e) => { if (e.target === msgOverlay) finishDialog(false); });
+document.addEventListener('keydown', (e) => {
+  if (!msgOverlay.classList.contains('open')) return;
+  if (e.key === 'Escape') { e.preventDefault(); finishDialog(false); return; }
+  if (e.key === 'Enter' && e.target === msgInput) { e.preventDefault(); finishDialog(true); return; }
+  if (e.key === 'Tab') {
+    // Fokus im Dialog halten
+    const items = [msgInput, msgCancelBtn, msgOkBtn].filter((el) => el.getClientRects().length > 0);
+    if (!items.length) return;
+    const first = items[0];
+    const last = items[items.length - 1];
+    if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+    else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+  }
+});
+
+// ---------- Eigene Rolle laden (steuert, welche Buttons/Bereiche angezeigt werden) ----------
+let myRole = 'owner'; // Standard bis /api/me geladen ist (z.B. wenn kein Login aktiv ist)
+let myUsername = '';
+
+async function loadMyself() {
+  try {
+    const res = await fetch('/api/me');
+    if (!res.ok) return;
+    const me = await res.json();
+    myRole = me.role;
+    myUsername = me.username;
+  } catch (e) {
+    // Ohne /api/me einfach bei den Standardwerten bleiben (z.B. kein Login konfiguriert)
+  }
+
+  const badgeWrap = document.getElementById('accountBadgeWrap');
+  const usernameLabel = document.getElementById('myUsernameLabel');
+  const adminLink = document.getElementById('adminLink');
+  const addAccountCard = document.getElementById('addAccountCard');
+
+  if (myUsername) {
+    badgeWrap.style.display = '';
+    usernameLabel.textContent = myUsername;
+    document.getElementById('myRoleTag').textContent =
+      myRole === 'owner' ? 'Owner' : myRole === 'admin' ? 'Admin' : 'User';
+  }
+  if (myRole === 'owner' || myRole === 'admin') {
+    adminLink.style.display = '';
+  }
+  if (myRole === 'user' && addAccountCard) {
+    addAccountCard.style.display = 'none';
+  }
+  // Falls die Account-Liste schon vor dem Laden der Rolle angekommen ist, jetzt mit
+  // der korrekten Rolle neu rendern (verhindert kurzes Aufblitzen falscher Buttons)
+  if (lastAccountsList.length > 0) renderAccounts(lastAccountsList);
+}
+
+loadMyself();
+
+document.getElementById('logoutBtn')?.addEventListener('click', async () => {
+  await fetch('/api/logout', { method: 'POST' });
+  window.location.href = '/login';
+});
+
+// ---------- Farbschema ----------
+const THEME_STORAGE_KEY = 'afk-manager-theme';
+
+function applyTheme(theme) {
+  if (theme === 'dark') {
+    document.documentElement.removeAttribute('data-theme');
+  } else {
+    document.documentElement.setAttribute('data-theme', theme);
+  }
+}
+
+function initTheme() {
+  const saved = localStorage.getItem(THEME_STORAGE_KEY) || 'dark';
+  applyTheme(saved);
+  const select = document.getElementById('themeSelect');
+  select.value = saved;
+  select.addEventListener('change', () => {
+    applyTheme(select.value);
+    localStorage.setItem(THEME_STORAGE_KEY, select.value);
+  });
+}
+initTheme();
+
+// ---------- Schriftart ----------
+const FONT_STORAGE_KEY = 'afk-manager-font';
+
+function applyFont(font) {
+  if (font === 'default') {
+    document.documentElement.removeAttribute('data-font');
+  } else {
+    document.documentElement.setAttribute('data-font', font);
+  }
+}
+
+function initFont() {
+  const saved = localStorage.getItem(FONT_STORAGE_KEY) || 'default';
+  applyFont(saved);
+  const select = document.getElementById('fontSelect');
+  select.value = saved;
+  select.addEventListener('change', () => {
+    applyFont(select.value);
+    localStorage.setItem(FONT_STORAGE_KEY, select.value);
+  });
+}
+initFont();
+
+// ---------- Katze ----------
+const catMessages = ['Miau!', 'Streichel mich!', 'Pfoten hoch 🐾', 'Purr~', 'Alles online?', 'Mach Pause!'];
+let catBubbleTimer = null;
+let dodgeCooldownUntil = 0;
+
+function showCatBubble(msg) {
+  const bubble = document.getElementById('catBubble');
+  if (!bubble) return;
+  bubble.textContent = msg;
+  bubble.classList.add('show');
+  clearTimeout(catBubbleTimer);
+  catBubbleTimer = setTimeout(() => bubble.classList.remove('show'), 2200);
+}
+
+function catHappy() {
+  const svg = document.getElementById('catSvg');
+  if (!svg) return;
+  svg.classList.remove('sad');
+  svg.classList.remove('cat-bounce');
+  void svg.offsetWidth;
+  svg.classList.add('cat-bounce');
+  showCatBubble('Yay, alle online! 🎉');
+}
+
+function catSad() {
+  const svg = document.getElementById('catSvg');
+  if (!svg) return;
+  svg.classList.add('sad');
+  showCatBubble('Schade, alle offline... 😿');
+}
+
+function launchConfetti() {
+  const colors = ['#4f8cff', '#52e08a', '#f6b94f', '#ef5b5b', '#c9a3ff'];
+  const container = document.createElement('div');
+  container.style.position = 'fixed';
+  container.style.inset = '0';
+  container.style.pointerEvents = 'none';
+  container.style.zIndex = '9999';
+  document.body.appendChild(container);
+
+  for (let i = 0; i < 60; i++) {
+    const piece = document.createElement('div');
+    const size = 6 + Math.random() * 6;
+    piece.style.position = 'absolute';
+    piece.style.top = '-20px';
+    piece.style.left = Math.random() * 100 + 'vw';
+    piece.style.width = size + 'px';
+    piece.style.height = size * 0.6 + 'px';
+    piece.style.background = colors[Math.floor(Math.random() * colors.length)];
+    piece.style.opacity = '0.9';
+    piece.style.borderRadius = '2px';
+    piece.style.transform = `rotate(${Math.random() * 360}deg)`;
+    const duration = 2200 + Math.random() * 1400;
+    const drift = (Math.random() - 0.5) * 200;
+    piece.animate(
+      [
+        { transform: `translate(0, 0) rotate(0deg)`, opacity: 0.9 },
+        { transform: `translate(${drift}px, 100vh) rotate(${360 + Math.random() * 360}deg)`, opacity: 0.6 },
+      ],
+      { duration, easing: 'ease-in', fill: 'forwards' }
+    );
+    container.appendChild(piece);
+  }
+
+  setTimeout(() => container.remove(), 3800);
+}
+
+function initCat() {
+  const svg = document.getElementById('catSvg');
+  const stage = document.getElementById('catStage');
+  const bubble = document.getElementById('catBubble');
+  const pupils = svg.querySelectorAll('.cat-pupil');
+  if (!svg) return;
+
+  document.addEventListener('mousemove', (e) => {
+    const rect = svg.getBoundingClientRect();
+    const cx = rect.left + rect.width / 2;
+    const cy = rect.top + rect.height * 0.35;
+    const dx = e.clientX - cx;
+    const dy = e.clientY - cy;
+    const dist = Math.hypot(dx, dy);
+
+    const eyeDist = Math.min(2.4, dist / 60);
+    const angle = Math.atan2(dy, dx);
+    const ox = Math.cos(angle) * eyeDist;
+    const oy = Math.sin(angle) * eyeDist;
+    pupils.forEach((p) => {
+      p.style.transform = `translate(${ox}px, ${oy}px)`;
+    });
+
+    // Kleines Versteckspiel: wenn der Mauszeiger sehr nah kommt, weicht die Katze kurz aus
+    if (dist < 55 && Date.now() > dodgeCooldownUntil) {
+      dodgeCooldownUntil = Date.now() + 2500;
+      const dodgeX = dx >= 0 ? -22 : 22;
+      stage.style.transform = `translateX(${dodgeX}px)`;
+      setTimeout(() => {
+        stage.style.transform = '';
+      }, 380);
+    }
+  });
+
+  svg.addEventListener('click', () => {
+    svg.classList.remove('cat-bounce');
+    void svg.offsetWidth; // Reflow erzwingen, damit die Animation neu startet
+    svg.classList.add('cat-bounce');
+    showCatBubble(catMessages[Math.floor(Math.random() * catMessages.length)]);
+  });
+}
+initCat();
+
+// ---------- Frei laufende Katze am unteren Rand ----------
+function initRoamingCat() {
+  const strip = document.getElementById('roamStrip');
+  const cat = document.getElementById('roamCat');
+  if (!strip || !cat) return;
+
+  let pos = Math.random() * 100;
+  let dir = 1;
+  let pauseUntil = 0;
+  const speed = 0.55; // Pixel pro Frame
+
+  function frame(time) {
+    const maxX = strip.clientWidth - cat.clientWidth;
+    if (maxX > 0) {
+      if (time > pauseUntil) {
+        pos += dir * speed;
+        if (pos >= maxX) {
+          pos = maxX;
+          dir = -1;
+          pauseUntil = time + 800 + Math.random() * 1200; // kurze Verschnaufpause an den Raendern
+        } else if (pos <= 0) {
+          pos = 0;
+          dir = 1;
+          pauseUntil = time + 800 + Math.random() * 1200;
+        }
+      }
+      cat.style.transform = `translateX(${pos}px) scaleX(${dir})`;
+    }
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+}
+initRoamingCat();
+
+const socket = io();
+
+const accountListEl = document.getElementById('accountList');
+const chatlogEl = document.getElementById('chatlog');
+const chatAccountSelect = document.getElementById('chatAccountSelect');
+const controlAccountSelect = document.getElementById('controlAccountSelect');
+const msaContainer = document.getElementById('msaContainer');
+const chatPrimaryInfo = document.getElementById('chatPrimaryInfo');
+
+let primaryUsername = null;
+let chatActive = false;
+const msaBoxes = {}; // username -> DOM element
+
+document.getElementById('addAccountBtn').addEventListener('click', async () => {
+  const username = document.getElementById('newUsername').value.trim();
+  if (!username) return;
+  const res = await fetch('/api/accounts', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username }),
+  });
+  const data = await res.json();
+  if (!res.ok) showMessage(data.error || 'Fehler');
+  document.getElementById('newUsername').value = '';
+});
+
+document.getElementById('sendChatBtn').addEventListener('click', sendChat);
+document.getElementById('tabBtn').addEventListener('click', () => handleTabComplete());
+
+let tabState = null; // { matches, index, baseText } fuer zyklisches Durch-Tabben/Antippen
+const tabSuggestionsEl = document.getElementById('tabSuggestions');
+
+document.getElementById('chatInput').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') {
+    sendChat();
+    return;
+  }
+  if (e.key === 'Tab') {
+    e.preventDefault();
+    handleTabComplete();
+    return;
+  }
+  // Bei jeder anderen Taste: Tab-Zyklus zuruecksetzen
+  clearTabState();
+});
+
+function clearTabState() {
+  tabState = null;
+  tabSuggestionsEl.innerHTML = '';
+}
+
+async function handleTabComplete() {
+  const input = document.getElementById('chatInput');
+  const username = chatAccountSelect.value;
+  if (!username) return;
+
+  // Wenn wir schon mitten in einem Tab-Zyklus sind (z.B. per Taste/Button mehrfach gedrueckt),
+  // einfach zum naechsten Treffer springen
+  if (tabState && tabState.matches.length > 0) {
+    tabState.index = (tabState.index + 1) % tabState.matches.length;
+    applyTabMatch(input, tabState);
+    renderTabSuggestions();
+    return;
+  }
+
+  const text = input.value;
+
+  if (text.startsWith('/')) {
+    // Server-seitige Befehls-Vervollstaendigung (wie im echten Minecraft-Chat)
+    try {
+      const res = await fetch('/api/tabcomplete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, text }),
+      });
+      const data = await res.json();
+      if (data.matches && data.matches.length > 0) {
+        tabState = {
+          matches: data.matches,
+          index: 0,
+          baseText: text,
+          start: typeof data.start === 'number' ? data.start : null,
+          length: typeof data.length === 'number' ? data.length : null,
+        };
+        applyTabMatch(input, tabState);
+        renderTabSuggestions();
+      }
+    } catch (e) {
+      // still, kein Treffer
+    }
+  } else {
+    // Spielername-Vervollstaendigung anhand aktuell online sichtbarer Spieler
+    const parts = text.split(' ');
+    const lastWord = parts[parts.length - 1];
+    if (!lastWord) return;
+    try {
+      const res = await fetch('/api/players/' + encodeURIComponent(username));
+      const data = await res.json();
+      const matches = (data.players || []).filter((p) =>
+        p.toLowerCase().startsWith(lastWord.toLowerCase())
+      );
+      if (matches.length > 0) {
+        tabState = { matches, index: 0, baseText: text, start: null, length: null };
+        applyTabMatch(input, tabState);
+        renderTabSuggestions();
+      }
+    } catch (e) {
+      // kein Treffer
+    }
+  }
+}
+
+function renderTabSuggestions() {
+  tabSuggestionsEl.innerHTML = '';
+  if (!tabState || tabState.matches.length <= 1) return;
+  tabState.matches.forEach((m, i) => {
+    const chip = document.createElement('span');
+    chip.className = 'tab-chip' + (i === tabState.index ? ' active' : '');
+    chip.textContent = m;
+    chip.onclick = () => {
+      tabState.index = i;
+      applyTabMatch(document.getElementById('chatInput'), tabState);
+      renderTabSuggestions();
+      document.getElementById('chatInput').focus();
+    };
+    tabSuggestionsEl.appendChild(chip);
+  });
+}
+
+function applyTabMatch(input, state) {
+  const match = state.matches[state.index];
+  if (state.start !== null && state.length !== null) {
+    // Server hat uns genau gesagt, welchen Bereich wir ersetzen sollen
+    const before = state.baseText.slice(0, state.start);
+    const after = state.baseText.slice(state.start + state.length);
+    input.value = before + match + after;
+  } else if (state.start === null && state.baseText.startsWith('/')) {
+    // Kein Bereich vom Server bekannt -> ganzen Text durch den Treffer ersetzen
+    input.value = match;
+  } else {
+    // Spielername: letztes Wort ersetzen
+    const parts = state.baseText.split(' ');
+    parts[parts.length - 1] = match;
+    input.value = parts.join(' ');
+  }
+  input.setSelectionRange(input.value.length, input.value.length);
+}
+
+async function sendChat() {
+  const username = chatAccountSelect.value;
+  const message = document.getElementById('chatInput').value;
+  if (!username || !message) return;
+  const res = await fetch('/api/chat', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username, message }),
+  });
+  if (!res.ok) {
+    // Nachricht im Eingabefeld stehen lassen, damit nichts verloren geht
+    const data = await res.json().catch(() => ({}));
+    showMessage(data.error || 'Nachricht konnte nicht gesendet werden');
+    return;
+  }
+  document.getElementById('chatInput').value = '';
+  clearTabState();
+}
+
+async function startAccount(username) {
+  await fetch('/api/start/' + encodeURIComponent(username), { method: 'POST' });
+}
+async function stopAccount(username) {
+  await fetch('/api/stop/' + encodeURIComponent(username), { method: 'POST' });
+}
+async function removeAccount(username) {
+  const confirmed = await showConfirm('Account ' + username + ' wirklich entfernen?', {
+    title: 'Account entfernen',
+    okLabel: 'Entfernen',
+    danger: true,
+  });
+  if (!confirmed) return;
+  await fetch('/api/accounts/' + encodeURIComponent(username), { method: 'DELETE' });
+}
+async function makePrimary(username) {
+  await fetch('/api/accounts/' + encodeURIComponent(username) + '/make-primary', { method: 'POST' });
+}
+async function toggleNotifyElsewhere(username, currentlyEnabled) {
+  const res = await fetch('/api/accounts/' + encodeURIComponent(username) + '/notify-elsewhere', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ enabled: !currentlyEnabled }),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    showMessage(data.error || 'Fehler beim Umschalten');
+  }
+  // Die neue Anzeige kommt automatisch ueber das 'accounts'-Socket-Event
+}
+function toggleAutoChat(username) {
+  const area = document.getElementById('autochat-' + username);
+  if (!area) return;
+  area.style.display = area.style.display === 'none' ? 'block' : 'none';
+}
+async function addAutoChat(username) {
+  const textEl = document.getElementById('autochat-text-' + username);
+  const delayEl = document.getElementById('autochat-delay-' + username);
+  const text = textEl ? textEl.value.trim() : '';
+  const delay = delayEl ? parseInt(delayEl.value, 10) : NaN;
+  if (!text) { showMessage('Bitte einen Text eingeben.', false); return; }
+  if (isNaN(delay) || delay < 0) { showMessage('Bitte eine gültige Verzögerung in Sekunden eingeben (0 oder mehr).', false); return; }
+  const res = await fetch('/api/accounts/' + encodeURIComponent(username) + '/autochat', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ text, delaySeconds: delay }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) { showMessage(data.error || 'Fehler beim Hinzufügen'); return; }
+  if (textEl) textEl.value = '';
+  if (delayEl) delayEl.value = '';
+}
+async function deleteAutoChat(username, index) {
+  await fetch('/api/accounts/' + encodeURIComponent(username) + '/autochat/' + index, { method: 'DELETE' });
+}
+async function renameAccountPrompt(username) {
+  const newName = await showPrompt(`Neuer Name für ${username}:`, username, {
+    title: 'Account umbenennen',
+    okLabel: 'Umbenennen',
+  });
+  if (!newName) return;
+  const trimmed = newName.trim();
+  if (!trimmed || trimmed === username) return;
+  const res = await fetch('/api/accounts/' + encodeURIComponent(username) + '/rename', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ newUsername: trimmed }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) showMessage(data.error || 'Fehler beim Umbenennen');
+}
+async function startAllAccounts() {
+  await fetch('/api/start-all', { method: 'POST' });
+}
+async function stopAllAccounts() {
+  await fetch('/api/stop-all', { method: 'POST' });
+}
+function statusClass(status) {
+  if (status === 'online') return 'online';
+  if (status === 'gestoppt') return 'gestoppt';
+  if (status && status.startsWith('Warteschlange')) return 'queue';
+  return 'other';
+}
+
+function formatDuration(ms) {
+  const totalMin = Math.floor((ms || 0) / 60000);
+  const h = Math.floor(totalMin / 60);
+  const m = totalMin % 60;
+  if (h > 0) return `${h}h ${m}m`;
+  return `${m}m`;
+}
+
+function renderAccounts(accounts) {
+  accountListEl.innerHTML = '';
+
+  const previousChatSelection = chatAccountSelect.value;
+  // Offene Auto-Chat-Bereiche merken, damit sie nach dem Rendern wieder aufgeklappt sind
+  const openAutoChatPanels = new Set(
+    Array.from(document.querySelectorAll('[id^="autochat-"]'))
+      .filter((el) => el.style.display !== 'none')
+      .map((el) => el.id.slice('autochat-'.length))
+  );
+  chatAccountSelect.innerHTML = '';
+
+  const previousControlSelection = controlAccountSelect.value;
+  controlAccountSelect.innerHTML = '';
+
+  accounts.forEach((acc, index) => {
+    const row = document.createElement('div');
+    row.className = 'account-row';
+
+    const isPrimary = acc.isPrimary;
+    const isBedrock = acc.username.startsWith('.');
+    const canManage = myRole === 'owner' || myRole === 'admin';
+    const uptimePct = Math.min(100, ((acc.uptimeMs || 0) / (8 * 60 * 60 * 1000)) * 100);
+    const autoChatHtml = (acc.autoChat || []).map((a, i) =>
+      `<div class="autochat-item">
+        <span class="text">${escapeHtml(a.text)}</span>
+        <span class="delay-tag">${a.delaySeconds}s</span>
+        <button class="icon-btn ghost" onclick="deleteAutoChat(${jsArg(acc.username)},${i})" title="Entfernen">✕</button>
+      </div>`
+    ).join('');
+
+    // Feste Button-Plaetze: jeder Button steht bei jedem Account an derselben Stelle.
+    // Was fuer einen Account nicht moeglich ist, bleibt ausgegraut stehen statt zu fehlen.
+    const notifyOn = acc.notifyElsewhere !== false;
+    let starBtn = '';
+    let notifyBtn = '';
+    if (canManage) {
+      if (isPrimary) {
+        starBtn = `<button class="icon-btn ghost star-active" disabled title="Ist die aktuelle Chat-Quelle">★</button>`;
+      } else if (isBedrock) {
+        starBtn = `<button class="icon-btn ghost" disabled title="Bedrock-Accounts können keine Chat-Quelle sein">★</button>`;
+      } else {
+        starBtn = `<button class="icon-btn ghost" onclick="makePrimary(${jsArg(acc.username)})" title="Als Chat-Quelle festlegen">★</button>`;
+      }
+      notifyBtn = isBedrock
+        ? `<button class="icon-btn ghost" disabled title="Bei Bedrock-Accounts nicht verfügbar">🔔</button>`
+        : `<button class="icon-btn ghost${notifyOn ? '' : ' notify-off'}" onclick="toggleNotifyElsewhere(${jsArg(acc.username)}, ${notifyOn})" title="${notifyOn ? 'Discord-Meldung bei &quot;anderswo eingeloggt&quot;: AN (klicken zum Ausschalten)' : 'Discord-Meldung bei &quot;anderswo eingeloggt&quot;: AUS (klicken zum Einschalten)'}">${notifyOn ? '🔔' : '🔕'}</button>`;
+    }
+    const statusText = escapeHtml(acc.status || '');
+
+    row.innerHTML = `
+      <div class="account-name-line">
+        <strong title="${escapeHtml(acc.username)}">${escapeHtml(acc.username)}</strong>
+        ${isPrimary ? '<span class="primary-badge">Chat-Quelle</span>' : ''}
+        ${isBedrock ? '<span class="primary-badge" style="background:color-mix(in srgb,var(--accent) 12%,transparent);color:var(--accent-strong);border-color:color-mix(in srgb,var(--accent) 35%,transparent)">🎮 Bedrock</span>' : ''}
+        ${(canManage && (acc.autoChat || []).length > 0) ? `<span class="primary-badge" style="background:color-mix(in srgb,var(--status-other-dot) 15%,transparent);color:var(--status-other-text);border-color:color-mix(in srgb,var(--status-other-dot) 35%,transparent)">⏱ ${acc.autoChat.length}</span>` : ''}
+        <span class="status ${statusClass(acc.status)}" title="${statusText}"><span class="status-text">${statusText}</span></span>
+      </div>
+      <div class="account-buttons">
+        <div class="btn-group">
+          ${starBtn}
+          <button class="small" onclick="startAccount(${jsArg(acc.username)})">Start</button>
+          <button class="small stop" onclick="stopAccount(${jsArg(acc.username)})">Stop</button>
+        </div>
+        ${canManage ? `<div class="btn-group">
+          <button class="icon-btn ghost" onclick="renameAccountPrompt(${jsArg(acc.username)})" title="Umbenennen">✏️</button>
+          ${notifyBtn}
+          <button class="icon-btn ghost" onclick="toggleAutoChat(${jsArg(acc.username)})" title="Auto-Chat bearbeiten">⚙️</button>
+          <button class="icon-btn ghost" onclick="removeAccount(${jsArg(acc.username)})" title="Entfernen">✕</button>
+        </div>` : ''}
+      </div>
+      <div class="uptime-row">
+        <div class="uptime-bar"><div class="uptime-fill" style="width:${uptimePct}%"></div></div>
+        <span class="uptime-text">${formatDuration(acc.uptimeMs)} heute</span>
+      </div>
+      ${canManage ? `<div class="autochat-area" id="autochat-${escapeHtml(acc.username)}" style="display:none;">
+        <div class="autochat-list">${autoChatHtml || '<span style="font-size:12px;color:var(--text-sub)">Noch keine Auto-Chat-Aktionen.</span>'}</div>
+        <div class="autochat-add-row">
+          <input class="autochat-text-input" id="autochat-text-${escapeHtml(acc.username)}" placeholder='Text oder Befehl, z.B. /hide' />
+          <input class="autochat-delay-input" id="autochat-delay-${escapeHtml(acc.username)}" type="number" min="0" placeholder="Sek." />
+          <button class="small" onclick="addAutoChat(${jsArg(acc.username)})">+ Hinzufügen</button>
+        </div>
+      </div>` : ''}
+    `;
+    accountListEl.appendChild(row);
+
+    // Chat-Dropdown: ALLE Accounts (Bedrock kann Chat und Befehle senden).
+    // Steuerungs-Dropdown: nur Java-Accounts (Bedrock hat keine Ingame-Steuerung).
+    const opt = document.createElement('option');
+    opt.value = acc.username;
+    opt.textContent = isBedrock ? `${acc.username} (Bedrock)` : acc.username;
+    chatAccountSelect.appendChild(opt);
+
+    if (!isBedrock) {
+      const ctrlOpt = document.createElement('option');
+      ctrlOpt.value = acc.username;
+      ctrlOpt.textContent = acc.username;
+      controlAccountSelect.appendChild(ctrlOpt);
+    }
+  });
+
+  if (accounts.some((a) => a.username === previousChatSelection)) {
+    chatAccountSelect.value = previousChatSelection;
+  }
+  if (accounts.some((a) => a.username === previousControlSelection)) {
+    controlAccountSelect.value = previousControlSelection;
+  }
+  openAutoChatPanels.forEach((username) => {
+    const el = document.getElementById('autochat-' + username);
+    if (el) el.style.display = 'block';
+  });
+
+  updateStatusStrip(accounts);
+  reactCatToStatus(accounts);
+}
+
+let lastOnlineCount = null;
+let lastTotalCount = null;
+
+function reactCatToStatus(accounts) {
+  const total = accounts.length;
+  const online = accounts.filter((a) => a.status === 'online').length;
+
+  if (lastOnlineCount === null) {
+    // Erster Ladevorgang, nur Zustand merken, nicht reagieren
+    lastOnlineCount = online;
+    lastTotalCount = total;
+    return;
+  }
+
+  if (total > 0 && online === total && (lastOnlineCount !== online || lastTotalCount !== total)) {
+    catHappy();
+    if (lastOnlineCount < online) launchConfetti();
+  } else if (total > 0 && online === 0 && lastOnlineCount > 0) {
+    catSad();
+  }
+
+  lastOnlineCount = online;
+  lastTotalCount = total;
+}
+
+function updateStatusStrip(accounts) {
+  const el = document.getElementById('statusStripText');
+  const dot = document.querySelector('#statusStrip .dot');
+  const total = accounts.length;
+  const online = accounts.filter((a) => a.status === 'online').length;
+  el.textContent = `${online} / ${total} online`;
+  dot.style.background = online > 0 ? 'var(--status-online-dot)' : 'var(--status-off-dot)';
+}
+
+function updateChatStatusDisplay() {
+  if (!primaryUsername) {
+    chatPrimaryInfo.textContent = '(kein Account vorhanden)';
+    showChatOff('Noch kein Account hinzugefügt.');
+  } else if (!chatActive) {
+    chatPrimaryInfo.textContent = `(${primaryUsername} - offline)`;
+    showChatOff(`Chat ist aus, weil ${primaryUsername} gerade nicht läuft.`);
+  } else {
+    chatPrimaryInfo.textContent = `(${primaryUsername})`;
+  }
+}
+
+function showChatOff(text) {
+  chatlogEl.innerHTML = `<div class="chat-off">${escapeHtml(text)}</div>`;
+}
+
+let chatHistoryData = []; // gesamter im Browser gesammelter Verlauf (fuer Suche/Export)
+let chatSearchTerm = '';
+const CHAT_HISTORY_CLIENT_LIMIT = 3000;
+
+function renderChatHistory(history) {
+  chatHistoryData = history.slice();
+  redrawChatLog();
+}
+
+function redrawChatLog() {
+  chatlogEl.innerHTML = '';
+  if (!chatActive) {
+    updateChatStatusDisplay();
+    return;
+  }
+
+  const term = chatSearchTerm.trim().toLowerCase();
+  const filtered = term
+    ? chatHistoryData.filter((m) => m.text.toLowerCase().includes(term))
+    : chatHistoryData;
+
+  if (filtered.length === 0) {
+    chatlogEl.innerHTML = term
+      ? '<div class="chat-off">Keine Treffer für diese Suche.</div>'
+      : '<div class="chat-off">Noch keine Nachrichten in den letzten 10 Minuten.</div>';
+    return;
+  }
+  filtered.forEach((m) => appendChatLine(m));
+  chatlogEl.scrollTop = chatlogEl.scrollHeight;
+}
+
+function addChatLine(msg) {
+  chatHistoryData.push(msg);
+  if (chatHistoryData.length > CHAT_HISTORY_CLIENT_LIMIT) {
+    chatHistoryData = chatHistoryData.slice(-CHAT_HISTORY_CLIENT_LIMIT);
+  }
+  const term = chatSearchTerm.trim().toLowerCase();
+  if (term && !msg.text.toLowerCase().includes(term)) return;
+  appendChatLine(msg);
+  chatlogEl.scrollTop = chatlogEl.scrollHeight;
+}
+
+function appendChatLine(msg) {
+  const line = document.createElement('div');
+  line.className = 'chat-line';
+  const time = new Date(msg.ts).toLocaleTimeString();
+  line.innerHTML = `<span class="chat-user">[${time}]</span> ${escapeHtml(msg.text)}`;
+  chatlogEl.appendChild(line);
+}
+
+document.getElementById('chatSearch').addEventListener('input', (e) => {
+  chatSearchTerm = e.target.value;
+  redrawChatLog();
+});
+
+document.getElementById('exportChatBtn').addEventListener('click', () => {
+  if (chatHistoryData.length === 0) return;
+  const lines = chatHistoryData.map((m) => `[${new Date(m.ts).toLocaleString()}] ${m.text}`);
+  const blob = new Blob([lines.join('\n')], { type: 'text/plain;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `chat-verlauf-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}.txt`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+});
+
+// Text sicher in HTML einsetzen - auch in Attribute (deshalb auch " und ')
+function escapeHtml(str) {
+  return String(str ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+// Wert sicher als Argument in onclick="..." einsetzen
+function jsArg(v) {
+  return escapeHtml(JSON.stringify(String(v ?? '')));
+}
+
+function showMsaBox(data) {
+  let box = msaBoxes[data.username];
+  if (!box) {
+    box = document.createElement('div');
+    box.className = 'msa-box';
+    msaContainer.appendChild(box);
+    msaBoxes[data.username] = box;
+  }
+  box.innerHTML = `
+    <div><strong>Microsoft-Login nötig für ${escapeHtml(data.username)}</strong></div>
+    <div><a href="${escapeHtml(data.directUri || data.verificationUri)}" target="_blank" rel="noopener"><strong>👉 Hier klicken und anmelden</strong></a> – der Code ist im Link schon eingetragen.</div>
+    <div>Falls doch nach einem Code gefragt wird (auf <a href="${escapeHtml(data.verificationUri)}" target="_blank" rel="noopener">${escapeHtml(data.verificationUri)}</a>):</div>
+    <div class="msa-code">${escapeHtml(data.userCode)}</div>
+  `;
+}
+
+function removeMsaBox(username) {
+  const box = msaBoxes[username];
+  if (box) {
+    box.remove();
+    delete msaBoxes[username];
+  }
+}
+
+// ---------- Socket-Events ----------
+let lastAccountsList = [];
+socket.on('accounts', (list) => {
+  lastAccountsList = list;
+  renderAccounts(list);
+});
+
+socket.on('chat-status', (data) => {
+  primaryUsername = data.primary;
+  chatActive = data.active;
+  updateChatStatusDisplay();
+});
+
+socket.on('chat-state', (data) => {
+  primaryUsername = data.primary;
+  chatActive = data.active;
+  renderChatHistory(data.history);
+});
+
+socket.on('chat', (msg) => {
+  if (chatActive) addChatLine(msg);
+});
+
+socket.on('msa-code', showMsaBox);
+socket.on('msa-code-clear', (data) => removeMsaBox(data.username));
+
+// ---------- Ingame-Steuerung ----------
+function getControlUsername() {
+  return controlAccountSelect.value;
+}
+
+async function sendMove(direction, pressed) {
+  const username = getControlUsername();
+  if (!username) return;
+  try {
+    await fetch('/api/control/' + encodeURIComponent(username) + '/move', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ direction, state: pressed }),
+    });
+  } catch (e) {
+    // still, kein Blockieren der UI bei kurzen Netzwerkhakeln
+  }
+}
+
+function wireHoldButton(btnId, direction) {
+  const btn = document.getElementById(btnId);
+  const press = (e) => {
+    e.preventDefault();
+    sendMove(direction, true);
+  };
+  const release = (e) => {
+    e.preventDefault();
+    sendMove(direction, false);
+  };
+  btn.addEventListener('mousedown', press);
+  btn.addEventListener('touchstart', press, { passive: false });
+  btn.addEventListener('mouseup', release);
+  btn.addEventListener('mouseleave', release);
+  btn.addEventListener('touchend', release);
+  btn.addEventListener('touchcancel', release);
+}
+
+wireHoldButton('ctrlForward', 'forward');
+wireHoldButton('ctrlBack', 'back');
+wireHoldButton('ctrlLeft', 'left');
+wireHoldButton('ctrlRight', 'right');
+wireHoldButton('ctrlJump', 'jump');
+
+let sneakActive = false;
+document.getElementById('ctrlSneak').addEventListener('click', () => {
+  sneakActive = !sneakActive;
+  document.getElementById('ctrlSneak').classList.toggle('active', sneakActive);
+  sendMove('sneak', sneakActive);
+});
+
+document.getElementById('ctrlDismount').addEventListener('click', async () => {
+  const username = getControlUsername();
+  if (!username) return;
+  await fetch('/api/control/' + encodeURIComponent(username) + '/dismount', { method: 'POST' });
+});
+
+document.getElementById('ctrlLeftclick').addEventListener('click', async () => {
+  const username = getControlUsername();
+  if (!username) return;
+  await fetch('/api/control/' + encodeURIComponent(username) + '/leftclick', { method: 'POST' });
+});
+
+document.getElementById('ctrlRightclick').addEventListener('click', async () => {
+  const username = getControlUsername();
+  if (!username) return;
+  await fetch('/api/control/' + encodeURIComponent(username) + '/rightclick', { method: 'POST' });
+});
+
+async function sendDrop(all) {
+  const username = getControlUsername();
+  if (!username) return;
+  const res = await fetch('/api/control/' + encodeURIComponent(username) + '/drop', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ all }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) showMessage(data.error || 'Fehler beim Droppen');
+}
+document.getElementById('ctrlDrop').addEventListener('click', () => sendDrop(false));
+document.getElementById('ctrlDropAll').addEventListener('click', () => sendDrop(true));
+
+const hotbarRow = document.getElementById('hotbarRow');
+for (let i = 0; i < 9; i++) {
+  const btn = document.createElement('button');
+  btn.className = 'small ghost hotbar-btn';
+  btn.textContent = String(i + 1);
+  btn.addEventListener('click', async () => {
+    const username = getControlUsername();
+    if (!username) return;
+    await fetch('/api/control/' + encodeURIComponent(username) + '/hotbar', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ slot: i }),
+    });
+  });
+  hotbarRow.appendChild(btn);
+}
+</script>
+</body>
+</html>

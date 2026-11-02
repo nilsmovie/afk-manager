@@ -1,0 +1,47 @@
+# ------------------------------------------------------------------
+# Was NIE ins Repository darf
+# ------------------------------------------------------------------
+
+# Zugangsdaten und Einstellungen (Discord-Token, Passwort, Webhooks ...)
+.env
+.env.*
+!.env.example
+
+# Daten des laufenden Managers (Accounts, Dashboard-Benutzer mit Passwort-Hashes)
+accounts.json
+accounts.backup.json
+users.json
+users.backup.json
+
+# Protokoll (wer hat was gemacht, mit IP-Adressen)
+audit.log
+audit.log.*
+audit-known-ips.json
+
+# Microsoft-/Xbox-Logins, falls sie je im Ordner landen
+nmp-cache/
+cache/
+
+# Eigene Erweiterungen, die nur auf diesem Rechner laufen
+erweiterungen/
+
+# ------------------------------------------------------------------
+# Was nicht ins Repository gehoert, weil es von selbst entsteht
+# ------------------------------------------------------------------
+
+# Pakete (kommen mit "npm install")
+node_modules/
+
+# Logs, Absturzdateien, Sicherungskopien
+*.log
+logs/
+core
+core.[0-9]*
+*.bak
+*.alt
+*.orig
+*.tmp
+*.vorher
+*~
+.DS_Store
+Thumbs.db

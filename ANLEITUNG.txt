@@ -1,0 +1,514 @@
+﻿==============================================================================
+ AFK MANAGER - EINRICHTUNG
+==============================================================================
+
+Der AFK Manager hält mehrere Minecraft-Accounts rund um die Uhr auf einem
+Server online (Java und Bedrock). Du steuerst alles über ein Web-Dashboard im
+Browser und optional über Discord (Befehle, Benachrichtigungen, Chat-Spiegel).
+
+Der Manager meldet sich nach Kicks oder Server-Neustarts automatisch wieder an,
+und zwar nacheinander von oben nach unten in der Account-Liste.
+
+
+------------------------------------------------------------------------------
+ 0. WAS DU BRAUCHST
+------------------------------------------------------------------------------
+
+ - Einen Rechner, der dauerhaft läuft: Raspberry Pi, Mini-PC, Server oder zum
+   Ausprobieren einfach dein normaler PC/Laptop.
+ - Node.js 20 oder neuer (getestet mit 22): https://nodejs.org
+   Prüfen mit:  node -v
+   (Auf Linux/Raspberry Pi ist die Version aus dem Paketmanager manchmal zu alt.)
+ - Minecraft-Accounts mit Microsoft-Konto.
+   WICHTIG: Aktiviere bei jedem dieser Microsoft-Konten die
+   Zwei-Faktor-Authentifizierung (https://account.microsoft.com/security).
+   Ohne 2FA scheitert der Login-Code-Ablauf bei manchen Konten mit der Meldung
+   "device_code has already been used".
+ - Optional: ein Discord-Server, auf dem du einen Bot oder Webhooks anlegen
+   darfst.
+
+
+------------------------------------------------------------------------------
+ 1. DATEIEN
+------------------------------------------------------------------------------
+
+Entpacke den Ordner irgendwohin, z.B. nach  /home/DEINNAME/afk-manager  oder
+C:\afk-manager. Die Struktur muss so aussehen:
+
+   afk-manager/
+     server.js
+     package.json
+     login.html          <- im Hauptordner, NICHT in public
+     admin.html          <- im Hauptordner, NICHT in public
+     env.example
+     ANLEITUNG.txt
+     public/
+       index.html        <- nur diese eine Datei gehört in public
+
+Beim Betrieb entstehen weitere Dateien im selben Ordner:
+   accounts.json, accounts.backup.json   (deine Minecraft-Accounts)
+   users.json, users.backup.json         (Dashboard-Benutzer, Passwörter gehasht)
+   .env                                  (deine Einstellungen)
+Diese Dateien sind privat - siehe Abschnitt 9.
+
+
+------------------------------------------------------------------------------
+ 2. INSTALLATION
+------------------------------------------------------------------------------
+
+Öffne ein Terminal (Windows: PowerShell oder Eingabeaufforderung) im Ordner
+afk-manager und führe aus:
+
+   npm install
+
+Das lädt alle Abhängigkeiten herunter und dauert ein paar Minuten.
+
+Schlägt die Installation bei "raknet-native" fehl, siehe Abschnitt 8,
+Punkt "npm install bricht ab". Das betrifft nur die Bedrock-Unterstützung.
+
+
+------------------------------------------------------------------------------
+ 3. EINSTELLUNGEN (.env)
+------------------------------------------------------------------------------
+
+   Windows:      copy env.example .env
+   Linux / Mac:  cp env.example .env
+
+Öffne die neue Datei ".env" mit einem Texteditor und trage mindestens ein:
+
+   DASHBOARD_PASSWORD   Dein Passwort fürs Dashboard (Abschnitt 4).
+   MC_SERVER_HOST       Adresse deines Minecraft-Servers, z.B. play.beispiel.net
+   MC_SERVER_PORT       Meist 25565
+   MC_BEDROCK_PORT      Meist 19132 (nur für Bedrock-Accounts)
+
+Wenn du MC_SERVER_HOST nicht änderst, verbinden sich die Accounts mit
+clashsmp.de. Alle Einstellungen sind in der env.example erklärt.
+
+
+------------------------------------------------------------------------------
+ 4. STARTEN UND ERSTER LOGIN
+------------------------------------------------------------------------------
+
+   node server.js
+
+Öffne im Browser:   http://localhost:3000
+(von einem anderen Gerät im selben Netz:  http://IP-DES-RECHNERS:3000)
+
+Beim allerersten Start wird automatisch ein Owner-Account angelegt:
+
+   Benutzername:  nils
+   Passwort:      das, was du bei DASHBOARD_PASSWORD eingetragen hast
+
+Der Name "nils" ist nur der Standardname und ändert nichts an der Funktion.
+Wenn du einen eigenen Namen willst: Programm mit Strg+C beenden, die Datei
+users.json mit einem Texteditor öffnen, bei  "username": "nils"  den Namen
+ändern (die Anführungszeichen behalten), speichern und neu starten.
+
+WICHTIG: Lass DASHBOARD_PASSWORD danach in der .env stehen. Ist die Zeile
+leer oder gelöscht, schaltet sich der Login komplett ab und das Dashboard ist
+für jeden offen. Geprüft wird das Passwort ab dem ersten Start nur noch gegen
+users.json - eine spätere Änderung in der .env ändert es nicht.
+
+Passwörter von Admins und Usern änderst du in der Verwaltung (Abschnitt 6).
+Das Owner-Passwort lässt sich dort NICHT ändern. Soll es neu gesetzt werden
+(oder hast du es vergessen): DASHBOARD_PASSWORD in der .env ändern, users.json
+UND users.backup.json löschen, neu starten. Der Owner wird neu angelegt, alle
+anderen Benutzer sind dann weg.
+
+
+------------------------------------------------------------------------------
+ 5. ACCOUNTS HINZUFÜGEN UND ANMELDEN
+------------------------------------------------------------------------------
+
+Java-Account:
+   Im Dashboard links bei "Account hinzufügen" den Minecraft-Namen eingeben
+   und auf "Hinzufügen" klicken.
+
+Bedrock-Account:
+   Ein Punkt vor den Namen setzen, z.B.  .MeinGamertag
+   Der Punkt sagt dem Manager "Bedrock". Beim Login-Code das Microsoft-Konto
+   nehmen, das zu diesem Xbox-Gamertag gehört.
+
+Microsoft-Login (nur beim ersten Mal pro Account):
+   1. Der Account startet, im Dashboard erscheint oben eine Box mit einem Code
+      und einem Link (und eine Nachricht in Discord, falls eingerichtet).
+   2. Klick in Discord auf "Jetzt anmelden" oder auf "Hier klicken und
+      anmelden" (im Dashboard ebenso). Der Code steckt schon im Link
+      (https://www.microsoft.com/link?otc=CODE), du musst nichts kopieren.
+      Fragt die Seite doch nach dem Code, steht er zum Kopieren darunter.
+   3. Melde dich mit dem Microsoft-Konto an, das zu DIESEM Minecraft-Account
+      gehört.
+   4. Der Code gilt so lange, wie in der Nachricht steht (meist 15 Minuten).
+      Danach ist der Login gespeichert und es ist kein Code mehr nötig. Die
+      Discord-Nachricht ändert sich dann auf "ist angemeldet".
+   Läuft ein Code ab, kommt automatisch ein neuer (die alte Nachricht wird als
+   "abgelaufen" markiert, nur der neueste Code gilt). Nach 4 unbenutzten Codes
+   pausiert der Login für diesen Account, bis du auf Start drückst (im
+   Dashboard oder über den Knopf in Discord).
+   Der Login-Token liegt im Ordner "nmp-cache" im Minecraft-Ordner:
+      Windows:  %APPDATA%\.minecraft\nmp-cache
+      Linux:    ~/.minecraft/nmp-cache
+      Mac:      ~/Library/Application Support/minecraft/nmp-cache
+   Dieser Ordner ist so sensibel wie ein Passwort - niemals weitergeben.
+
+Buttons pro Account:
+   Start / Stop       Account starten / stoppen
+   ★                  Diesen Account zur Chat-Quelle machen
+   ✏️                  Umbenennen (der gespeicherte Login bleibt erhalten)
+   ⚙️                  Auto-Chat: Text oder Befehl plus Sekunden nach dem
+                      Verbinden, wird nach jedem Reconnect automatisch gesendet
+   🔔 / 🔕            Discord-Meldung "anderswo eingeloggt" an/aus (nur Java).
+                      Neu hinzugefügte Accounts starten mit 🔕 (aus);
+                      bestehende Accounts behalten ihre Einstellung.
+   ✕                  Account entfernen (löscht auch den gespeicherten Login)
+
+Gut zu wissen:
+ - Loggst du dich mit einem Account selbst im Spiel ein, fliegt der Bot raus
+   ("anderswo eingeloggt"). Er verbindet sich dann bewusst NICHT automatisch
+   neu. Drücke wieder auf Start, wenn du fertig bist.
+ - Beim Programmstart werden alle gespeicherten Accounts automatisch gestartet.
+ - Bedrock-Accounts bleiben online und können Nachrichten und /Befehle senden:
+   im Dashboard-Chat (Auswahl "Name (Bedrock)"), per Discord (!mc) und per
+   Auto-Chat. Normaler Chat geht auf jeder Bedrock-Version, /Befehle nur
+   auf Servern ab Bedrock 1.26 (sonst kommt eine Fehlermeldung). Nicht möglich
+   sind: Chat-Quelle sein, Ingame-Steuerung (WASD usw.) und die Tab-Taste zur
+   Vervollständigung. Antworten auf Befehle siehst du nur, wenn sie im Chat des
+   Servers erscheinen.
+ - Rechts im Dashboard: Live-Chat (über den gewählten Account schreiben) und
+   eine Steuerung (Laufen, Springen, Schleichen, Klicks, Hotbar, Droppen).
+
+
+------------------------------------------------------------------------------
+ 6. BENUTZER UND ROLLEN
+------------------------------------------------------------------------------
+
+Oben rechts im Dashboard gibt es für Owner und Admins den Button "Verwaltung".
+
+   Owner   Darf alles, inklusive Admins anlegen und löschen.
+   Admin   Sieht alle Accounts, darf normale Benutzer anlegen, löschen und
+           ihnen Accounts zuweisen. Admins und Owner kann er nicht ändern.
+   User    Sieht und bedient nur die zugewiesenen Minecraft-Accounts: Start/Stop,
+           Chat und Steuerung. Kein Hinzufügen, Umbenennen oder Entfernen.
+
+So kannst du Freunden Zugriff auf einzelne Accounts geben, ohne dass sie alles
+sehen.
+
+
+------------------------------------------------------------------------------
+ 7. DISCORD (OPTIONAL)
+------------------------------------------------------------------------------
+
+Alles hier ist freiwillig. Ohne Discord läuft das Dashboard normal.
+
+Discord-IDs kopieren: Discord > Einstellungen > Erweitert > "Entwicklermodus"
+einschalten. Dann Rechtsklick auf Kanal oder Rolle > "ID kopieren".
+
+a) Webhooks (nur Nachrichten senden):
+   Kanal bearbeiten > Integrationen > Webhooks > Neuer Webhook > URL kopieren.
+   DISCORD_WEBHOOK_URL         Benachrichtigungen: Kicks, alle offline/online,
+                               Login-Codes, Tageszusammenfassung um 00:00 Uhr.
+                               (Mit Bot: nur noch Rückfall, siehe b.)
+   DISCORD_CHAT_WEBHOOK_URL    Spiegelt den Ingame-Chat (am besten eigener Kanal).
+
+b) Bot (für Befehle und Buttons):
+   1. https://discord.com/developers/applications > "New Application".
+   2. Reiter "Bot": Token kopieren > DISCORD_BOT_TOKEN.
+   3. Auf derselben Seite unter "Privileged Gateway Intents" den
+      "Message Content Intent" einschalten. Ohne ihn liest der Bot keine Befehle.
+   4. Reiter "OAuth2" > "URL Generator": Scope "bot" ankreuzen. Rechte: Kanäle
+      ansehen, Nachrichten senden, Links einbetten, Nachrichtenverlauf lesen.
+      Die erzeugte URL im Browser öffnen und den Bot zu deinem Server einladen.
+   5. ID des Kanals, in dem der Bot arbeiten soll > DISCORD_CHANNEL_ID.
+   6. Bot-Token UND Kanal-ID müssen beide gesetzt sein.
+
+   Ist der Bot eingerichtet, schickt ER alle Meldungen (Login-Codes, Kicks,
+   online/offline, Start, Tageszusammenfassung, Chat-Spiegel), und zwar in
+   dieselben Kanäle, in die bisher die Webhooks geschrieben haben. Die Webhooks
+   bleiben nur als Rückfall eingetragen (falls der Bot mal nicht verbunden ist).
+   Der Bot braucht dafür in diesen Kanälen ebenfalls die Rechte aus Punkt 4.
+   Wer die Kanäle fest vorgeben will (optional):
+      DISCORD_NOTIFY_CHANNEL_ID   Kanal für alle Meldungen
+      DISCORD_CHAT_CHANNEL_ID     Kanal für den Chat-Spiegel
+
+   DISCORD_ALLOWED_ROLE_IDS: Rollen-IDs mit Komma getrennt, die Befehle nutzen
+   dürfen. Bleibt das leer, darf JEDER mit Zugriff auf den Kanal die Befehle
+   benutzen. Halte den Kanal dann privat oder trage Rollen ein.
+
+   Befehle im Bot-Kanal:
+      !mc Account Text          Text oder /Befehl über den Account senden
+      !start Account | all      Account (oder alle) starten
+      !stop Account | all       Account (oder alle) stoppen
+      !list                     Status aller Accounts
+      !primary Account          Chat-Quelle festlegen
+      !rename Alt Neu           Account umbenennen
+      !add Name                 Account hinzufügen
+
+   Klappt ein Klick auf einen Discord-Knopf nicht, steht der Grund im Log
+   (Zeile mit [Diagnose]): "kam zu spät an" = Programm war ausgelastet, einfach
+   nochmal; "von einer ANDEREN Instanz beantwortet" = der AFK-Manager läuft doppelt.
+
+Nach Änderungen an der .env das Programm neu starten.
+
+
+------------------------------------------------------------------------------
+ 8. DAUERBETRIEB UND WARTUNG
+------------------------------------------------------------------------------
+
+Damit der Manager nach dem Schließen des Terminals und nach einem Neustart des
+Rechners weiterläuft, nimm pm2:
+
+   npm install -g pm2
+   pm2 start server.js --name afk-manager
+   pm2 save
+   pm2 startup              (Linux/Mac: zeigt einen Befehl an, den du kopieren
+                             und ausführen musst)
+
+HINWEIS Umzug auf den PowerEdge: Läuft der Manager dort (Dienst "afk-manager" per
+systemd), dürfen die pm2-Befehle unten auf dem Raspberry Pi NICHT benutzt werden -
+sonst läuft er doppelt. Dort startest du neu mit:  sudo systemctl restart afk-manager
+(siehe ANLEITUNG-UMZUG.txt).
+
+Nützlich:
+   pm2 logs afk-manager      Logs live ansehen
+   pm2 restart afk-manager   Neu starten (nach .env- oder Datei-Änderungen)
+   pm2 stop afk-manager      Stoppen
+
+Logs begrenzen (empfohlen, sonst wachsen sie ohne Ende):
+
+   pm2 install pm2-logrotate
+   pm2 set pm2-logrotate:max_size 50M
+   pm2 set pm2-logrotate:retain 3
+   pm2 set pm2-logrotate:compress true
+
+Nur Linux, dringend empfohlen: Core-Dumps ausschalten. Stürzt ein Prozess ab,
+schreibt Linux sonst ein Speicherabbild von mehreren hundert MB in den
+Projektordner (Dateien "core.12345"). Auf Nils' Raspberry Pi hat sich das auf
+rund 19 GB summiert und die Speicherkarte gefüllt.
+
+   echo "kernel.core_pattern=/dev/null" | sudo tee -a /etc/sysctl.conf
+   sudo sysctl -p
+
+Updates einspielen: Nur server.js, package.json, login.html, admin.html und
+public/index.html ersetzen, NICHT .env, accounts.json oder users.json. Danach
+"npm install" und Neustart.
+
+Sichern: Kopiere ab und zu accounts.json, users.json, deine .env und den
+nmp-cache-Ordner an einen sicheren, privaten Ort (nicht in die Cloud-Freigabe!).
+
+
+------------------------------------------------------------------------------
+ 9. SICHERHEIT
+------------------------------------------------------------------------------
+
+ - Setze IMMER ein DASHBOARD_PASSWORD. Ohne Passwort hat jeder, der die Seite
+   erreicht, vollen Zugriff.
+ - Das Dashboard läuft über unverschlüsseltes HTTP. Mach es nicht einfach per
+   Port-Weiterleitung im Internet erreichbar, Passwort und Login-Cookie wären
+   mitlesbar. Für den Zugriff von außen nimm HTTPS, z.B. über einen
+   Cloudflare Tunnel, ein VPN oder einen Reverse-Proxy.
+ - NIEMALS weitergeben oder hochladen: .env, accounts.json, users.json,
+   die *.backup.json-Dateien, den nmp-cache-Ordner, Logs und core.*-Dateien.
+   Darin stehen Passwort-Hashes, Discord-Token, Webhook-URLs und die
+   Microsoft-Logins deiner Accounts.
+ - Ist ein Discord-Bot-Token oder eine Webhook-URL versehentlich öffentlich
+   geworden: sofort im Discord Developer Portal bzw. in den Kanal-Einstellungen
+   neu erzeugen. Die alte Version ist dann wertlos.
+ - Nutze nur eigene Accounts und prüfe, ob dein Minecraft-Server AFK-Accounts
+   erlaubt. Die Nutzung geschieht auf eigene Verantwortung.
+
+
+------------------------------------------------------------------------------
+ 10. PROBLEME UND LÖSUNGEN
+------------------------------------------------------------------------------
+
+Dashboard nicht erreichbar
+   pm2 logs afk-manager  (oder die Ausgabe im Terminal) ansehen. Läuft das
+   Programm? Stimmt der PORT? Blockiert eine Firewall den Port?
+
+Login-Code funktioniert nicht / "device_code has already been used"
+   1. Zwei-Faktor-Authentifizierung beim Microsoft-Konto aktivieren
+      (Abschnitt 0). Das war bei Nils die Lösung.
+   2. Prüfen, ob der Speicherplatz voll ist (siehe "ENOSPC").
+
+"ENOSPC: no space left on device"
+   Die Festplatte ist voll. Mit  df -h  prüfen (Linux). Häufige Ursachen:
+   riesige pm2-Logs (pm2 flush) oder core.*-Dateien im Projektordner
+   (rm core.*). Siehe Abschnitt 8 für die dauerhafte Lösung.
+
+npm install bricht ab (raknet-native)
+   Das gehört zur Bedrock-Unterstützung und braucht Build-Werkzeuge.
+   Linux/Raspberry Pi:   sudo apt install -y build-essential cmake
+   Danach "npm install" wiederholen. Auf Windows sind die Visual Studio
+   Build Tools plus CMake nötig.
+   Brauchst du kein Bedrock: Lösche in package.json die Zeile
+      "bedrock-protocol": "^3.59.0",
+   (sie steht ganz oben unter "dependencies", alle anderen Zeilen bleiben
+   unverändert) und führe "npm install" erneut aus. Java-Accounts
+   funktionieren dann normal. Im Log erscheint danach beim Start einmalig
+   "bedrock-protocol nicht verfuegbar" - das ist in diesem Fall korrekt.
+
+Im Log: "bedrock-protocol nicht verfuegbar"
+   Das Paket ist nicht installiert oder konnte nicht geladen werden. Siehe
+   den Punkt direkt darüber. Java-Accounts sind nicht betroffen.
+
+Bedrock-Account bricht ständig ab, Log: "Invalid tag: 103 > 20"
+   Das ist ein Fehler in einer Bibliothek (prismarine-nbt). Bei Nils hat eine
+   kleine Notlösung die Abbrüche deutlich reduziert (Ordner "optional-bedrock-
+   patch"). Sie ändert nur zwei Zeilen: statt bei unbekannten NBT-Tags einen
+   Fehler zu werfen, wird das Lesen an der Stelle abgebrochen.
+   Nur anwenden, wenn der Fehler auftritt, und nur bei prismarine-nbt 2.8.0
+   (prüfen mit:  npm ls prismarine-nbt). Datei kopieren nach:
+      node_modules/prismarine-nbt/compiler-compound.js
+   Bei jedem "npm install" muss das wiederholt werden. Es ist ein Provisorium,
+   keine offizielle Korrektur.
+
+Mehr als ca. 10 Bedrock-Accounts gleichzeitig: weitere bekommen "Connect timed
+out"
+   Bei Nils' Netzwerk wurde das beobachtet. Der Server-Owner hat bestätigt, dass
+   serverseitig kein Limit eingestellt ist, die Ursache blieb ungeklärt (auf
+   dem Heimnetz-Anschluss trat es auf, über einen Handy-Hotspot nicht). Falls
+   es bei dir auch passiert, ist es kein Fehler im Programm.
+
+Discord-Bot reagiert nicht
+   Sind DISCORD_BOT_TOKEN und DISCORD_CHANNEL_ID beide gesetzt? Ist der
+   "Message Content Intent" eingeschaltet? Darf der Bot im Kanal lesen und
+   schreiben? Wurde das Programm nach der .env-Änderung neu gestartet?
+
+Bedrock-Accounts und NetherNet (seit Bedrock 26.60, Okt. 2026)
+   Bedrock 26.60 verbindet sich nicht mehr über RakNet, sondern über NetherNet
+   (Anmeldung per HTTP auf dem Bedrock-Port, danach WebRTC über UDP). Geyser
+   nimmt nach dem Update standardmäßig nur noch NetherNet an.
+   Der Manager kann beides: Vor dem Verbinden fragt er den Server, ob er
+   NetherNet anbietet (wird 10 Minuten gemerkt), und nimmt sonst RakNet.
+   Im Log steht dazu einmal:
+      [Bedrock] clashsmp.de:19132 bietet NetherNet an - ... über NetherNet
+   und je Account:  --- eingeloggt (Bedrock, NetherNet) ---
+   Optional in der .env:
+      MC_BEDROCK_TRANSPORT=auto        auto (Standard), nethernet oder raknet
+      MC_BEDROCK_VERSION=1.26.60       feste Version (leer = neueste bekannte)
+      MC_BEDROCK_NETHERNET_IPV6=1      NetherNet über IPv4 und IPv6 (Standard: nur IPv4)
+      MC_BEDROCK_NETHERNET_IPV6=only   NetherNet NUR über IPv6 (siehe unten)
+      MC_BEDROCK_NETHERNET_WEBRTC=werift  empfohlen (siehe "Eigene Threads" unten)
+   WebRTC-Umsetzung: werift (reines JavaScript) läuft für jeden Bedrock-Account in
+   einem eigenen Thread. Das native WebRTC (wrtc, Paket @roamhq/wrtc) läuft nur
+   im Haupt-Thread und hat dort am 31.10.2026 in 5 Minuten 5 GB RAM verbraucht und
+   den Manager bis zu 30 s einfrieren lassen - nicht benutzen.
+   Bietet der Server zusätzlich RakNet an (Geyser "transport: both"), nimmt der
+   Manager im Modus auto automatisch RakNet (bewährt, nativer Code).
+   Geyser beendet eine Verbindung, wenn für einen Spieler mehr als 64 MiB im
+   Ausgang warten (der Client nimmt nicht schnell genug ab) - im Log steht dann
+   bei "NetherNet getrennt" ein "SCTP-ABORT vom Server".
+   Warum nur IPv4: Mit IPv6 antwortete der Server teils über IPv6, während die
+   Bots über IPv4 sendeten. Die IPv6-Firewall der FritzBox hat die Antworten dann
+   nach 2-4 Minuten nicht mehr durchgelassen, die Accounts flogen ständig raus.
+   Nur IPv6 (MC_BEDROCK_NETHERNET_IPV6=only): Seit 31.10.2026 antwortet clashsmp.de
+   über IPv4 nicht mehr auf NetherNet (auch nicht nach neuer IP), über IPv6 schon.
+   Mit "only" laufen beide Richtungen über IPv6 - das Gemisch aus beidem war die
+   Ursache der Abbrüche oben. Im Log steht dann "NetherNet ueber nur IPv6" und je
+   Account "--- eingeloggt (Bedrock, NetherNet ueber IPv6) ---".
+   Antwortet der Server irgendwann wieder über IPv4: Zeile aus der .env löschen
+   und neu starten.
+   Reißt eine NetherNet-Verbindung ab, steht im Log eine Zeile
+      [Diagnose] [Account] NetherNet getrennt nach ... min - Verlauf: ...
+   ("ICE failed" = unsere Seite hat aufgegeben, sonst hat der Server getrennt).
+   Braucht bedrock-protocol 3.61.0 oder neuer und die Datei nethernet-http.js
+   im Programmordner.
+   Kommt trotzdem keine Verbindung zustande, versuchen es die Accounts von
+   selbst weiter (Pause wächst bis 5 Minuten) und blockieren die anderen
+   Accounts nicht. Kommt kein Bedrock-Account durch, schickt der Manager einmal
+   (höchstens alle 6 Stunden) eine Meldung mit dem Grund in Discord.
+
+Schutz gegen Dauer-Neuverbindungen (Bedrock)
+   Hunderte Neuverbindungen pro Nacht können dazu führen, dass der Server bzw.
+   sein DDoS-Schutz unsere IP eine Weile sperrt. Deshalb:
+    - Bedrock-Pause: Scheitern 5 Verbindungsversuche hintereinander und ist KEIN
+      Bedrock-Account online, warten alle Bedrock-Accounts 15 Minuten
+      (Status "Bedrock-Pause bis HH:MM"). Danach probiert es EIN Account. Klappt
+      es, kommen die anderen der Reihe nach; sonst wieder 15 Minuten Pause.
+      Log:  [Bedrock] 5 Verbindungsversuche hintereinander gescheitert ...
+    - Bricht die Verbindung eines Accounts immer wieder kurz nach dem Einloggen
+      ab (unter 5 Minuten), wartet er ab dem 3. Mal in Folge 5 Minuten, ab dem
+      5. Mal 15 Minuten. Status "Bricht immer wieder ab – Pause bis HH:MM".
+    - Ein Klick auf Start (Webseite oder Discord) probiert es immer sofort.
+    - Scheitert der Aufbau, steht der Grund im Log, z.B.
+         [Diagnose] [Account] NetherNet-Aufbau gescheitert (connecterror:9) - Verlauf: ...
+      "ICE checking" ohne "ICE connected" = über UDP kam gar nichts zurück.
+   Einstellbar in der .env (meist nicht nötig):
+      MC_BEDROCK_PAUSE_AFTER_FAILS=5   ab so vielen Fehlschlägen in Folge Pause
+      MC_BEDROCK_PAUSE_MIN=15          Länge der Pause in Minuten
+
+Weniger Rechenlast bei Bedrock
+   Ein AFK-Bot braucht von den 800-1500 Paketen pro Sekunde, die der Server
+   schickt, nur eine Handvoll. Der Rest wird am Paketkopf erkannt und
+   weggeworfen, statt ihn zu entschlüsseln. Dazu wird schneller entpackt, und
+   (bei werift) wird nur noch jedes 2. Datenpaket einzeln bestätigt statt jedes.
+   Im Log beim Start:
+      [Bedrock] Paketfilter an (1.26.60): 9 von 254 Pakettypen werden gelesen ...
+   Alle 10 Minuten zeigt die Diagnose-Zeile CPU und die Pakete pro Sekunde:
+      [Diagnose] RAM ... CPU 35%, 18 Bots verbunden, Bedrock-Pakete/s gelesen 3, verworfen 4200
+   (CPU 100% = ein Prozessorkern voll. Durch die eigenen Threads kann der Wert
+   über 100% liegen - das ist in Ordnung. Ein Warnzeichen ist "Prozess hing bis
+   zu ... ms" mit Werten über 1000: dann ist der Haupt-Thread überlastet.)
+   Abschalten, falls je etwas komisch ist: MC_BEDROCK_PACKET_FILTER=0 bzw.
+   MC_BEDROCK_FAST_INFLATE=0 in der .env.
+
+Eigene Threads für Bedrock-Accounts
+   Accounts an einer Farm bekommen über NetherNet mehrere tausend Nachrichten pro
+   Sekunde (NilsMovie2 über 4000). Jede muss entschlüsselt und bestätigt werden.
+   Lief alles in einem Thread, war ein Kern voll (top: 105%), die Bestätigungen
+   kamen zu spät, und Geyser hat nach 2-3 Minuten getrennt (SCTP-ABORT).
+   Deshalb läuft jeder NetherNet-Account in einem eigenen Thread (Dateien
+   bedrock-worker.js, bedrock-thread.js, bedrock-tuning.js) und damit auf einem
+   eigenen Kern. Webseite, Discord und Java-Bots bleiben im Haupt-Thread frei.
+   Im Log:  [Bedrock] NetherNet-WebRTC: werift, jeder Bedrock-Account in einem eigenen Thread
+   Kostet etwa 80 MB RAM pro Bedrock-Account. RakNet-Accounts laufen wie bisher
+   im Haupt-Thread. Abschalten: MC_BEDROCK_THREADS=0
+
+Protokoll: wer hat was gemacht (Webseite und Discord)
+   Jede Aktion wird mit Uhrzeit festgehalten:
+    - Webseite: Anmeldung (auch fehlgeschlagene), Abmeldung, Accounts anlegen,
+      löschen, umbenennen, starten, stoppen, Chat/Befehle, Stern, Glocke,
+      Auto-Chat, Benutzer anlegen/ändern/löschen, Passwortänderungen - jeweils
+      mit Benutzer, IP-Adresse und Gerät (z.B. "iPhone / Safari").
+    - Discord: alle !-Befehle, Start-Knöpfe, Chat über !mc - jeweils mit Discord-Name, Discord-ID und Kanal. Auch
+      abgelehnte Versuche ohne Berechtigung.
+   Nachschauen (nur der Owner - Admins sehen das Protokoll nicht):
+    - Dashboard -> Verwaltung -> "Protokoll" (Suche nach Name, Account, IP ...)
+    - oder:  tail -n 50 ~/afk-manager/audit.log
+    - oder:  sudo journalctl -u afk-manager --no-pager | grep "\[Protokoll\]"
+   Die Datei audit.log wird ab 5 MB zu audit.log.1 (davor liegende Einträge
+   bleiben also lange erhalten).
+   In Discord kommt standardmäßig NICHTS davon. Wer es doch will:
+   AUDIT_DISCORD=1 in der .env - dann meldet der Manager sofort in Discord:
+   Anmeldung von einer für den Benutzer neuen IP-Adresse, Account im Dashboard
+   angelegt/gelöscht/umbenannt, Benutzer angelegt/gelöscht/Passwort/Rolle geändert.
+
+Aktive Anmeldungen und Passwort
+   Dashboard -> Verwaltung -> "Aktive Anmeldungen" (nur für den Owner) zeigt jedes
+   angemeldete Gerät mit IP-Adresse und wann es zuletzt aktiv war. Fremde Geräte
+   lassen sich dort einzeln abmelden, oder alle anderen auf einmal.
+   "Mein Passwort ändern" geht jetzt für jeden (auch Owner und Admin) und meldet
+   alle anderen Geräte dieses Benutzers ab. Passwörter brauchen mindestens 8
+   Zeichen. Ein Neustart des Managers meldet ALLE Geräte ab.
+   Account- und Benutzernamen dürfen keine Sonderzeichen wie < > " ' enthalten
+   (sonst könnte darüber Code im Dashboard ausgeführt werden).
+
+Discord-Klicks klappen nur manchmal / Antworten kommen doppelt
+   Meist läuft der AFK-Manager zweimal mit demselben Bot-Token (z.B. zusätzlich
+   auf dem Pi). Dann antworten beide auf jeden Klick und es gewinnt zufällig
+   einer. Ab dieser Version bleibt eine zweite Instanz still, wenn ihr Port schon
+   belegt ist (Log: "[Diagnose] Port ... ist schon belegt"). Prüfen:
+      Pi:         pm2 list           (afk-manager muss "stopped" sein)
+      PowerEdge:  ~/afk-umzug/afk-umzug.sh status
+
+
+------------------------------------------------------------------------------
+ 11. HINWEIS: AUF CLASHSMP.DE ZUGESCHNITTEN
+------------------------------------------------------------------------------
+
+Der AFK Manager wurde für den Server clashsmp.de gebaut. Die Grundfunktionen
+laufen auf jedem Minecraft-Server. Folgendes ist aber auf clashsmp.de
+zugeschnitten und sieht woanders evtl. anders aus:
+ - Die Formatierung der Chat-Spiegelung in Discord (Rang-Tags wie "[Spieler]",
+   Shop- und Tipp-Nachrichten).
+ - In den Seitentiteln steht "clashsmp.de".

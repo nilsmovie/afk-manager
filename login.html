@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8" />
+<title>Login - AFK Manager</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; }
+  body {
+    font-family: 'Inter', -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+    background:
+      radial-gradient(ellipse 900px 500px at 20% -10%, rgba(79, 140, 255, 0.12), transparent 60%),
+      #0f1115;
+    background-attachment: fixed;
+    color: #eef1f6;
+    margin: 0;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    -webkit-font-smoothing: antialiased;
+  }
+  .box {
+    background: #171921;
+    border: 1px solid rgba(255, 255, 255, 0.07);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+    border-radius: 16px;
+    padding: 32px 26px;
+    width: 100%;
+    max-width: 320px;
+  }
+  .lock-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: #4f8cff;
+    margin-bottom: 12px;
+  }
+  h1 {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 19px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    margin: 0 0 2px 0;
+  }
+  .sub { color: #8a90a6; font-size: 13px; margin-bottom: 22px; }
+  .pw-wrap {
+    position: relative;
+    margin-bottom: 14px;
+  }
+  input {
+    width: 100%;
+    font-size: 15px;
+    padding: 11px 42px 11px 13px;
+    border-radius: 9px;
+    border: 1px solid #33384a;
+    background: #12141b;
+    color: #eef1f6;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  }
+  input:focus {
+    outline: none;
+    border-color: #4f8cff;
+    box-shadow: 0 0 0 3px rgba(79, 140, 255, 0.25);
+  }
+  .toggle-pw {
+    position: absolute;
+    right: 11px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: none;
+    border: none;
+    padding: 4px;
+    cursor: pointer;
+    color: #8a90a6;
+    width: auto;
+    display: flex;
+    align-items: center;
+    transition: color 0.15s ease;
+  }
+  .toggle-pw:hover { color: #eef1f6; background: none; transform: translateY(-50%); }
+  .toggle-pw:active { transform: translateY(calc(-50% + 1px)); }
+  button {
+    width: 100%;
+    cursor: pointer;
+    background: #4f8cff;
+    border: none;
+    color: white;
+    font-family: 'Space Grotesk', sans-serif;
+    font-weight: 600;
+    font-size: 15px;
+    padding: 11px 12px;
+    border-radius: 9px;
+    transition: background 0.15s ease, transform 0.1s ease;
+  }
+  button:hover { background: #6ea1ff; }
+  button:active { transform: translateY(1px); }
+  .error {
+    color: #ef5b5b;
+    font-size: 13px;
+    margin-bottom: 12px;
+    min-height: 16px;
+  }
+</style>
+</head>
+<body>
+  <div class="box">
+    <div class="lock-dot"></div>
+    <h1>AFK Manager</h1>
+    <div class="sub">clashsmp.de</div>
+    <div class="error" id="errorMsg"></div>
+    <input type="text" id="usernameInput" placeholder="Benutzername" autofocus style="margin-bottom: 10px; padding-right: 13px;" />
+    <div class="pw-wrap">
+      <input type="password" id="passwordInput" placeholder="Passwort" />
+      <button class="toggle-pw" id="togglePw" type="button" title="Passwort anzeigen">
+        <svg id="eyeIcon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+          <circle cx="12" cy="12" r="3"/>
+        </svg>
+        <svg id="eyeOffIcon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none">
+          <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/>
+          <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/>
+          <line x1="1" y1="1" x2="23" y2="23"/>
+        </svg>
+      </button>
+    </div>
+    <button id="loginBtn">Anmelden</button>
+  </div>
+
+<script>
+const usernameInput = document.getElementById('usernameInput');
+const passwordInput = document.getElementById('passwordInput');
+const errorMsg = document.getElementById('errorMsg');
+const togglePw = document.getElementById('togglePw');
+const eyeIcon = document.getElementById('eyeIcon');
+const eyeOffIcon = document.getElementById('eyeOffIcon');
+
+togglePw.addEventListener('click', () => {
+  const show = passwordInput.type === 'password';
+  passwordInput.type = show ? 'text' : 'password';
+  eyeIcon.style.display = show ? 'none' : '';
+  eyeOffIcon.style.display = show ? '' : 'none';
+  passwordInput.focus();
+});
+
+document.getElementById('loginBtn').addEventListener('click', login);
+usernameInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') passwordInput.focus();
+});
+passwordInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') login();
+});
+
+async function login() {
+  errorMsg.textContent = '';
+  const username = usernameInput.value;
+  const password = passwordInput.value;
+  try {
+    const res = await fetch('/api/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password }),
+    });
+    if (res.ok) {
+      window.location.href = '/';
+    } else {
+      const data = await res.json().catch(() => ({}));
+      errorMsg.textContent = data.error || 'Benutzername oder Passwort falsch';
+      passwordInput.value = '';
+      passwordInput.type = 'password';
+      eyeIcon.style.display = '';
+      eyeOffIcon.style.display = 'none';
+      passwordInput.focus();
+    }
+  } catch (e) {
+    errorMsg.textContent = 'Verbindungsfehler, bitte erneut versuchen';
+  }
+}
+</script>
+</body>
+</html>
