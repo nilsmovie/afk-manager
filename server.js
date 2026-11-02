@@ -12,7 +12,7 @@ const { promisify } = require('util');
 const { monitorEventLoopDelay } = require('perf_hooks');
 
 // bedrock-protocol: optional, nur geladen wenn verfuegbar.
-// Muss auf dem Pi mit "npm install bedrock-protocol" installiert werden.
+// Wird mit "npm install" automatisch mitinstalliert.
 let bedrockProtocol = null;
 try {
   bedrockProtocol = require('bedrock-protocol');
@@ -52,8 +52,8 @@ process.on('unhandledRejection', (reason) => {
 const PORT = process.env.PORT || 3000;
 
 // ---------- Schutz gegen einen doppelt laufenden AFK-Manager ----------
-// Ist der Port schon belegt, laeuft der Manager bereits (oder auf dem Pi die Weiterleitung
-// zum PowerEdge). Frueher lief die zweite Instanz trotzdem weiter: ohne Webseite und ohne
+// Ist der Port schon belegt, laeuft der Manager bereits (oder ein anderes Programm nutzt
+// den Port). Frueher lief die zweite Instanz trotzdem weiter: ohne Webseite und ohne
 // Bots, aber MIT Discord-Verbindung - und hat dann auf jeden Discord-Klick mitgeantwortet
 // (z.B. "Account nicht online, Befehl NICHT gesendet"). Jetzt bleibt sie komplett still.
 let serverListening = false;
@@ -76,7 +76,7 @@ server.on('error', (err) => {
   }
   instanceIdle = true;
   const grund = err.code === 'EADDRINUSE'
-    ? `Port ${PORT} ist schon belegt - der AFK-Manager (oder auf dem Pi die Weiterleitung zum PowerEdge) laeuft bereits`
+    ? `Port ${PORT} ist schon belegt - der AFK-Manager laeuft bereits (oder ein anderes Programm nutzt diesen Port)`
     : `Der Webserver konnte nicht starten (${err.message})`;
   const meldung = `[Diagnose] ${grund}. Diese Instanz bleibt UNTAETIG (keine Bots, kein Discord), damit nichts doppelt passiert. Beenden: "pm2 stop afk-manager" bzw. "sudo systemctl stop afk-manager".`;
   console.error(meldung);
@@ -84,6 +84,8 @@ server.on('error', (err) => {
 });
 
 const MC_SERVER_HOST = process.env.MC_SERVER_HOST || 'clashsmp.de';
+// Name in den Seitentiteln des Dashboards (Standard: Adresse des Minecraft-Servers)
+const DASHBOARD_TITLE = (process.env.DASHBOARD_TITLE || MC_SERVER_HOST).trim();
 const MC_SERVER_PORT = parseInt(process.env.MC_SERVER_PORT || '25565', 10);
 const MC_BEDROCK_PORT = parseInt(process.env.MC_BEDROCK_PORT || '19132', 10);
 // Sichtweite der Bots in Chunks. AFK-Bots brauchen keine Welt um sich herum - mit dem
@@ -157,6 +159,10 @@ function nativeWebrtcAvailable() {
 }
 const HIDE_DELAY_MS = parseInt(process.env.HIDE_DELAY_MS || '60000', 10);
 const DASHBOARD_PASSWORD = process.env.DASHBOARD_PASSWORD;
+// Name des Owner-Benutzers, der beim allerersten Start angelegt wird (danach egal)
+const DASHBOARD_OWNER = /^[A-Za-z0-9_.-]{1,32}$/.test(process.env.DASHBOARD_OWNER || '')
+  ? process.env.DASHBOARD_OWNER
+  : 'admin';
 const ACCOUNTS_FILE = path.join(__dirname, 'accounts.json');
 const ACCOUNTS_BACKUP_FILE = path.join(__dirname, 'accounts.backup.json');
 const CHAT_HISTORY_MS = 10 * 60 * 1000; // 10 Minuten
@@ -353,13 +359,13 @@ let users = loadUsers();
 // aus dem bisherigen DASHBOARD_PASSWORD anlegen, damit niemand ausgesperrt wird.
 if (users.length === 0 && DASHBOARD_PASSWORD) {
   users.push({
-    username: 'nils',
+    username: DASHBOARD_OWNER,
     passwordHash: hashPassword(DASHBOARD_PASSWORD),
     role: 'owner',
     allowedAccounts: [],
   });
   saveUsers();
-  console.log('Erster Start nach dem Update: Owner-Account "nils" aus DASHBOARD_PASSWORD angelegt.');
+  console.log(`Erster Start: Owner-Benutzer "${DASHBOARD_OWNER}" mit dem Passwort aus DASHBOARD_PASSWORD angelegt.`);
 }
 
 function findUser(username) {
@@ -485,15 +491,31 @@ io.use((socket, next) => {
 app.use(checkAuth);
 app.use(express.json());
 
+// Die HTML-Seiten enthalten Platzhalter fuer den Servernamen, die hier ersetzt werden
+const PAGE_VALUES = {
+  '{{TITEL}}': htmlText(DASHBOARD_TITLE),
+  '{{SERVER}}': htmlText(MC_SERVER_HOST),
+};
+function htmlText(v) {
+  return String(v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+function sendPage(res, file) {
+  fs.readFile(file, 'utf8', (err, html) => {
+    if (err) return res.status(500).send('Seite fehlt: ' + path.basename(file));
+    for (const [key, value] of Object.entries(PAGE_VALUES)) html = html.split(key).join(value);
+    res.type('html').set('Cache-Control', 'no-cache').send(html);
+  });
+}
+
 app.get('/login', (req, res) => {
-  res.sendFile(path.join(__dirname, 'login.html'));
+  sendPage(res, path.join(__dirname, 'login.html'));
 });
 
 app.get('/admin', (req, res) => {
   if (!req.user || (req.user.role !== 'owner' && req.user.role !== 'admin')) {
     return res.redirect('/');
   }
-  res.sendFile(path.join(__dirname, 'admin.html'));
+  sendPage(res, path.join(__dirname, 'admin.html'));
 });
 
 app.post('/api/login', async (req, res) => {
@@ -769,6 +791,9 @@ app.post('/api/sessions/end-others', requireOwner, (req, res) => {
   res.json({ ok: true, ended: n });
 });
 
+app.get(['/', '/index.html'], (req, res) => {
+  sendPage(res, path.join(__dirname, 'public', 'index.html'));
+});
 app.use(express.static(path.join(__dirname, 'public')));
 
 // ---------- Accounts laden/speichern ----------
@@ -3420,7 +3445,7 @@ if (DISCORD_BOT_TOKEN && DISCORD_CHANNEL_ID) {
     if (code === 10062) {
       console.warn(`[Diagnose] Discord-Klick (${where}) kam zu spät an - Discord gibt nur 3 Sekunden. Der Prozess war in dem Moment ausgelastet; im Discord stand "Interaktion fehlgeschlagen".`);
     } else if (code === 40060) {
-      console.warn(`[Diagnose] Discord-Klick (${where}) wurde schon von einer ANDEREN Instanz beantwortet - läuft der AFK-Manager doppelt (z.B. zusätzlich auf dem Pi)?`);
+      console.warn(`[Diagnose] Discord-Klick (${where}) wurde schon von einer ANDEREN Instanz beantwortet - läuft der AFK-Manager doppelt (z.B. zusätzlich auf einem zweiten Rechner)?`);
     } else {
       console.error(`Discord-Interaction Fehler (${where}):`, e && e.message);
     }
