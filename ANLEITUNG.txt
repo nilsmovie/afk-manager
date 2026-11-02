@@ -16,7 +16,7 @@ und zwar nacheinander von oben nach unten in der Account-Liste.
 
  - Einen Rechner, der dauerhaft läuft: Raspberry Pi, Mini-PC, Server oder zum
    Ausprobieren einfach dein normaler PC/Laptop.
- - Node.js 20 oder neuer (getestet mit 22): https://nodejs.org
+ - Node.js 22 oder neuer: https://nodejs.org
    Prüfen mit:  node -v
    (Auf Linux/Raspberry Pi ist die Version aus dem Paketmanager manchmal zu alt.)
  - Minecraft-Accounts mit Microsoft-Konto.
@@ -24,30 +24,26 @@ und zwar nacheinander von oben nach unten in der Account-Liste.
    Zwei-Faktor-Authentifizierung (https://account.microsoft.com/security).
    Ohne 2FA scheitert der Login-Code-Ablauf bei manchen Konten mit der Meldung
    "device_code has already been used".
+ - git (Linux: sudo apt install git, Windows: https://git-scm.com)
  - Optional: ein Discord-Server, auf dem du einen Bot oder Webhooks anlegen
    darfst.
 
 
 ------------------------------------------------------------------------------
- 1. DATEIEN
+ 1. HERUNTERLADEN
 ------------------------------------------------------------------------------
 
-Entpacke den Ordner irgendwohin, z.B. nach  /home/DEINNAME/afk-manager  oder
-C:\afk-manager. Die Struktur muss so aussehen:
+Öffne ein Terminal (Windows: PowerShell) in dem Ordner, in den der Manager soll
+(z.B. dein Benutzerordner), und führe aus:
 
-   afk-manager/
-     server.js
-     package.json
-     login.html          <- im Hauptordner, NICHT in public
-     admin.html          <- im Hauptordner, NICHT in public
-     env.example
-     ANLEITUNG.txt
-     public/
-       index.html        <- nur diese eine Datei gehört in public
+   git clone https://github.com/nilsmovie/afk-manager.git
+   cd afk-manager
 
-Beim Betrieb entstehen weitere Dateien im selben Ordner:
+Damit entsteht der Ordner "afk-manager" mit allen Programmdateien. Beim
+Betrieb kommen weitere Dateien dazu:
    accounts.json, accounts.backup.json   (deine Minecraft-Accounts)
    users.json, users.backup.json         (Dashboard-Benutzer, Passwörter gehasht)
+   audit.log                             (Protokoll, Abschnitt 10)
    .env                                  (deine Einstellungen)
 Diese Dateien sind privat - siehe Abschnitt 9.
 
@@ -56,14 +52,13 @@ Diese Dateien sind privat - siehe Abschnitt 9.
  2. INSTALLATION
 ------------------------------------------------------------------------------
 
-Öffne ein Terminal (Windows: PowerShell oder Eingabeaufforderung) im Ordner
-afk-manager und führe aus:
+Im Ordner afk-manager:
 
    npm install
 
 Das lädt alle Abhängigkeiten herunter und dauert ein paar Minuten.
 
-Schlägt die Installation bei "raknet-native" fehl, siehe Abschnitt 8,
+Schlägt die Installation bei "raknet-native" fehl, siehe Abschnitt 10,
 Punkt "npm install bricht ab". Das betrifft nur die Bedrock-Unterstützung.
 
 
@@ -71,18 +66,19 @@ Punkt "npm install bricht ab". Das betrifft nur die Bedrock-Unterstützung.
  3. EINSTELLUNGEN (.env)
 ------------------------------------------------------------------------------
 
-   Windows:      copy env.example .env
-   Linux / Mac:  cp env.example .env
+   Windows:      copy .env.example .env
+   Linux / Mac:  cp .env.example .env
 
 Öffne die neue Datei ".env" mit einem Texteditor und trage mindestens ein:
 
    DASHBOARD_PASSWORD   Dein Passwort fürs Dashboard (Abschnitt 4).
+   DASHBOARD_OWNER      Dein Benutzername fürs Dashboard (leer = admin).
    MC_SERVER_HOST       Adresse deines Minecraft-Servers, z.B. play.beispiel.net
    MC_SERVER_PORT       Meist 25565
    MC_BEDROCK_PORT      Meist 19132 (nur für Bedrock-Accounts)
 
 Wenn du MC_SERVER_HOST nicht änderst, verbinden sich die Accounts mit
-clashsmp.de. Alle Einstellungen sind in der env.example erklärt.
+clashsmp.de. Alle Einstellungen sind in der .env.example erklärt.
 
 
 ------------------------------------------------------------------------------
@@ -96,12 +92,11 @@ clashsmp.de. Alle Einstellungen sind in der env.example erklärt.
 
 Beim allerersten Start wird automatisch ein Owner-Account angelegt:
 
-   Benutzername:  nils
+   Benutzername:  was bei DASHBOARD_OWNER steht (leer gelassen: admin)
    Passwort:      das, was du bei DASHBOARD_PASSWORD eingetragen hast
 
-Der Name "nils" ist nur der Standardname und ändert nichts an der Funktion.
-Wenn du einen eigenen Namen willst: Programm mit Strg+C beenden, die Datei
-users.json mit einem Texteditor öffnen, bei  "username": "nils"  den Namen
+DASHBOARD_OWNER zählt nur beim allerersten Start. Willst du den Namen später
+ändern: Programm beenden, in users.json bei  "username": "admin"  den Namen
 ändern (die Anführungszeichen behalten), speichern und neu starten.
 
 WICHTIG: Lass DASHBOARD_PASSWORD danach in der .env stehen. Ist die Zeile
@@ -109,9 +104,9 @@ leer oder gelöscht, schaltet sich der Login komplett ab und das Dashboard ist
 für jeden offen. Geprüft wird das Passwort ab dem ersten Start nur noch gegen
 users.json - eine spätere Änderung in der .env ändert es nicht.
 
-Passwörter von Admins und Usern änderst du in der Verwaltung (Abschnitt 6).
-Das Owner-Passwort lässt sich dort NICHT ändern. Soll es neu gesetzt werden
-(oder hast du es vergessen): DASHBOARD_PASSWORD in der .env ändern, users.json
+Dein eigenes Passwort änderst du in der Verwaltung unter "Mein Passwort
+ändern", die von Admins und Usern ebenfalls dort (Abschnitt 6).
+Owner-Passwort vergessen: DASHBOARD_PASSWORD in der .env ändern, users.json
 UND users.backup.json löschen, neu starten. Der Owner wird neu angelegt, alle
 anderen Benutzer sind dann weg.
 
@@ -263,10 +258,9 @@ Rechners weiterläuft, nimm pm2:
    pm2 startup              (Linux/Mac: zeigt einen Befehl an, den du kopieren
                              und ausführen musst)
 
-HINWEIS Umzug auf den PowerEdge: Läuft der Manager dort (Dienst "afk-manager" per
-systemd), dürfen die pm2-Befehle unten auf dem Raspberry Pi NICHT benutzt werden -
-sonst läuft er doppelt. Dort startest du neu mit:  sudo systemctl restart afk-manager
-(siehe ANLEITUNG-UMZUG.txt).
+Auf Linux geht statt pm2 auch ein systemd-Dienst (siehe README.md). Nimm
+nur EINES von beiden, sonst läuft der Manager doppelt. Mit systemd heißen die
+Befehle: sudo systemctl restart afk-manager / sudo journalctl -u afk-manager -f
 
 Nützlich:
    pm2 logs afk-manager      Logs live ansehen
@@ -282,15 +276,20 @@ Logs begrenzen (empfohlen, sonst wachsen sie ohne Ende):
 
 Nur Linux, dringend empfohlen: Core-Dumps ausschalten. Stürzt ein Prozess ab,
 schreibt Linux sonst ein Speicherabbild von mehreren hundert MB in den
-Projektordner (Dateien "core.12345"). Auf Nils' Raspberry Pi hat sich das auf
-rund 19 GB summiert und die Speicherkarte gefüllt.
+Projektordner (Dateien "core.12345"). Auf einem Raspberry Pi hat sich das schon
+auf rund 19 GB summiert und die Speicherkarte gefüllt.
 
    echo "kernel.core_pattern=/dev/null" | sudo tee -a /etc/sysctl.conf
    sudo sysctl -p
 
-Updates einspielen: Nur server.js, package.json, login.html, admin.html und
-public/index.html ersetzen, NICHT .env, accounts.json oder users.json. Danach
-"npm install" und Neustart.
+Updates einspielen (im Ordner afk-manager):
+
+   git pull
+   npm install
+   danach neu starten (pm2 restart afk-manager bzw. sudo systemctl restart afk-manager)
+
+Deine .env, accounts.json und users.json bleiben dabei unverändert. Ändere die
+Programmdateien nicht selbst, sonst bricht "git pull" ab.
 
 Sichern: Kopiere ab und zu accounts.json, users.json, deine .env und den
 nmp-cache-Ordner an einen sicheren, privaten Ort (nicht in die Cloud-Freigabe!).
@@ -327,7 +326,7 @@ Dashboard nicht erreichbar
 
 Login-Code funktioniert nicht / "device_code has already been used"
    1. Zwei-Faktor-Authentifizierung beim Microsoft-Konto aktivieren
-      (Abschnitt 0). Das war bei Nils die Lösung.
+      (Abschnitt 0). Das hat in den bisherigen Fällen geholfen.
    2. Prüfen, ob der Speicherplatz voll ist (siehe "ENOSPC").
 
 "ENOSPC: no space left on device"
@@ -340,9 +339,9 @@ npm install bricht ab (raknet-native)
    Linux/Raspberry Pi:   sudo apt install -y build-essential cmake
    Danach "npm install" wiederholen. Auf Windows sind die Visual Studio
    Build Tools plus CMake nötig.
-   Brauchst du kein Bedrock: Lösche in package.json die Zeile
-      "bedrock-protocol": "^3.59.0",
-   (sie steht ganz oben unter "dependencies", alle anderen Zeilen bleiben
+   Brauchst du kein Bedrock: Lösche in package.json die Zeile mit
+      "bedrock-protocol"
+   (sie steht oben unter "dependencies", alle anderen Zeilen bleiben
    unverändert) und führe "npm install" erneut aus. Java-Accounts
    funktionieren dann normal. Im Log erscheint danach beim Start einmalig
    "bedrock-protocol nicht verfuegbar" - das ist in diesem Fall korrekt.
@@ -352,19 +351,14 @@ Im Log: "bedrock-protocol nicht verfuegbar"
    den Punkt direkt darüber. Java-Accounts sind nicht betroffen.
 
 Bedrock-Account bricht ständig ab, Log: "Invalid tag: 103 > 20"
-   Das ist ein Fehler in einer Bibliothek (prismarine-nbt). Bei Nils hat eine
-   kleine Notlösung die Abbrüche deutlich reduziert (Ordner "optional-bedrock-
-   patch"). Sie ändert nur zwei Zeilen: statt bei unbekannten NBT-Tags einen
-   Fehler zu werfen, wird das Lesen an der Stelle abgebrochen.
-   Nur anwenden, wenn der Fehler auftritt, und nur bei prismarine-nbt 2.8.0
-   (prüfen mit:  npm ls prismarine-nbt). Datei kopieren nach:
-      node_modules/prismarine-nbt/compiler-compound.js
-   Bei jedem "npm install" muss das wiederholt werden. Es ist ein Provisorium,
-   keine offizielle Korrektur.
+   Das ist ein Fehler in einer Bibliothek (prismarine-nbt), der beim Lesen
+   bestimmter Pakete auftritt. Seit dem Paketfilter (siehe "Weniger Rechenlast
+   bei Bedrock") liest der Manager die meisten Pakete gar nicht mehr, deshalb
+   sollte das kaum noch vorkommen. Lass MC_BEDROCK_PACKET_FILTER eingeschaltet.
 
 Mehr als ca. 10 Bedrock-Accounts gleichzeitig: weitere bekommen "Connect timed
 out"
-   Bei Nils' Netzwerk wurde das beobachtet. Der Server-Owner hat bestätigt, dass
+   In einem Heimnetz wurde das beobachtet. Der Server-Owner hat bestätigt, dass
    serverseitig kein Limit eingestellt ist, die Ursache blieb ungeklärt (auf
    dem Heimnetz-Anschluss trat es auf, über einen Handy-Hotspot nicht). Falls
    es bei dir auch passiert, ist es kein Fehler im Programm.
@@ -454,7 +448,7 @@ Weniger Rechenlast bei Bedrock
 
 Eigene Threads für Bedrock-Accounts
    Accounts an einer Farm bekommen über NetherNet mehrere tausend Nachrichten pro
-   Sekunde (NilsMovie2 über 4000). Jede muss entschlüsselt und bestätigt werden.
+   Sekunde (einer über 4000). Jede muss entschlüsselt und bestätigt werden.
    Lief alles in einem Thread, war ein Kern voll (top: 105%), die Bestätigungen
    kamen zu spät, und Geyser hat nach 2-3 Minuten getrennt (SCTP-ABORT).
    Deshalb läuft jeder NetherNet-Account in einem eigenen Thread (Dateien
@@ -470,8 +464,9 @@ Protokoll: wer hat was gemacht (Webseite und Discord)
       löschen, umbenennen, starten, stoppen, Chat/Befehle, Stern, Glocke,
       Auto-Chat, Benutzer anlegen/ändern/löschen, Passwortänderungen - jeweils
       mit Benutzer, IP-Adresse und Gerät (z.B. "iPhone / Safari").
-    - Discord: alle !-Befehle, Start-Knöpfe, Chat über !mc - jeweils mit Discord-Name, Discord-ID und Kanal. Auch
-      abgelehnte Versuche ohne Berechtigung.
+    - Discord: alle !-Befehle, Start-Knöpfe, Chat über !mc - jeweils mit
+      Discord-Name, Discord-ID und Kanal. Auch abgelehnte Versuche ohne
+      Berechtigung.
    Nachschauen (nur der Owner - Admins sehen das Protokoll nicht):
     - Dashboard -> Verwaltung -> "Protokoll" (Suche nach Name, Account, IP ...)
     - oder:  tail -n 50 ~/afk-manager/audit.log
@@ -487,19 +482,18 @@ Aktive Anmeldungen und Passwort
    Dashboard -> Verwaltung -> "Aktive Anmeldungen" (nur für den Owner) zeigt jedes
    angemeldete Gerät mit IP-Adresse und wann es zuletzt aktiv war. Fremde Geräte
    lassen sich dort einzeln abmelden, oder alle anderen auf einmal.
-   "Mein Passwort ändern" geht jetzt für jeden (auch Owner und Admin) und meldet
+   "Mein Passwort ändern" geht für jeden (auch Owner und Admin) und meldet
    alle anderen Geräte dieses Benutzers ab. Passwörter brauchen mindestens 8
    Zeichen. Ein Neustart des Managers meldet ALLE Geräte ab.
    Account- und Benutzernamen dürfen keine Sonderzeichen wie < > " ' enthalten
    (sonst könnte darüber Code im Dashboard ausgeführt werden).
 
 Discord-Klicks klappen nur manchmal / Antworten kommen doppelt
-   Meist läuft der AFK-Manager zweimal mit demselben Bot-Token (z.B. zusätzlich
-   auf dem Pi). Dann antworten beide auf jeden Klick und es gewinnt zufällig
-   einer. Ab dieser Version bleibt eine zweite Instanz still, wenn ihr Port schon
-   belegt ist (Log: "[Diagnose] Port ... ist schon belegt"). Prüfen:
-      Pi:         pm2 list           (afk-manager muss "stopped" sein)
-      PowerEdge:  ~/afk-umzug/afk-umzug.sh status
+   Meist läuft der AFK-Manager zweimal mit demselben Bot-Token (z.B. auf zwei
+   Rechnern oder per pm2 UND systemd). Dann antworten beide auf jeden Klick und
+   es gewinnt zufällig einer. Auf demselben Rechner bleibt eine zweite Instanz
+   still, weil ihr Port schon belegt ist (Log: "[Diagnose] Port ... ist schon
+   belegt"). Prüfen:  pm2 list  und  sudo systemctl status afk-manager
 
 
 ------------------------------------------------------------------------------
@@ -511,4 +505,4 @@ laufen auf jedem Minecraft-Server. Folgendes ist aber auf clashsmp.de
 zugeschnitten und sieht woanders evtl. anders aus:
  - Die Formatierung der Chat-Spiegelung in Discord (Rang-Tags wie "[Spieler]",
    Shop- und Tipp-Nachrichten).
- - In den Seitentiteln steht "clashsmp.de".
+ - Ohne Eintrag bei MC_SERVER_HOST verbinden sich die Accounts mit clashsmp.de.
