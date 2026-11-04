@@ -445,9 +445,11 @@ function attach (client, { host, port, scheme, ipv6 = false, onStep = () => {} }
           hasIdentity: /^a=identity:/m.test(offer)
         })
         if (!usedScheme) usedScheme = (await probe({ host, port, networkId: localId })).scheme
-        const answer = filterSdp(await postOffer({ host, port, scheme: usedScheme, networkId: localId, sdp: offer }), { ipv6 })
+        const rawAnswer = await postOffer({ host, port, scheme: usedScheme, networkId: localId, sdp: offer })
+        const answer = filterSdp(rawAnswer, { ipv6 })
         const remote = candidates(answer)
-        onStep('antwort', { candidates: remote, hasIdentity: /^a=identity:/m.test(answer) })
+        // offered = alles, was der Server anbietet (auch die Adressen, die wir wegen ipv6 weglassen)
+        onStep('antwort', { candidates: remote, offered: candidates(rawAnswer), hasIdentity: /^a=identity:/m.test(answer) })
         nn.handleSignal(new SignalStructure(SignalType.ConnectResponse, signal.connectionId, answer, nn.serverNetworkId))
         // Rueckfall: nennt der Server seine oeffentliche Adresse nicht (z.B. hinter Docker), die
         // Adresse dazunehmen, unter der wir ihn gerade erreicht haben - mit dem UDP-Port aus seiner Antwort.

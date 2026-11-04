@@ -2388,6 +2388,21 @@ function maybeNotifyBedrockUnreachable(detail, transport) {
 
 // ---------- Bedrock-Bot ----------
 // Wo eine NetherNet-Verbindung zuletzt stand (fuer die Fehlermeldung, wenn sie scheitert)
+// Kandidaten kurz fuer das Log: "udp 2001:db8::1 19132 (host), udp 51.195.37.70 19132 (srflx)"
+function formatNnCandidates(list) {
+  if (!Array.isArray(list)) return 'unbekannt (keine Antwort)';
+  if (!list.length) return 'keine';
+  const seen = new Set();
+  const out = [];
+  for (const c of list) {
+    const key = `${c.protocol} ${c.ip} ${c.port}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(`${key} (${c.type})`);
+  }
+  return out.length > 8 ? `${out.slice(0, 8).join(', ')} und ${out.length - 8} weitere` : out.join(', ');
+}
+
 const NN_STEP_LABELS = {
   angebot: 'Verbindungsangebot an den Server geschickt',
   antwort: 'Antwort vom Server, UDP-Verbindung wird aufgebaut',
@@ -2488,6 +2503,9 @@ function connectBedrockClient(username, acc, route) {
   const onStep = (name, info = {}) => {
     const st = bots[username];
     if (st && st.bot === client && NN_STEP_LABELS[name]) st.nnStep = NN_STEP_LABELS[name];
+    // Adressen fuer die Diagnose-Zeile merken (welche bieten wir an, welche der Server)
+    if (st && st.bot === client && name === 'angebot') { st.nnOwn = info.candidates; st.nnServer = null; }
+    if (st && st.bot === client && name === 'antwort') st.nnServer = info.offered || info.candidates;
     if (name === 'signalisierung-fehler') {
       // z.B. Server lehnt ab (401/403/503) oder ist ueber TCP nicht erreichbar
       bedrockServerUnreachable(username, client, `NetherNet-Anmeldung: ${info.error.message}`, 'nethernet');
@@ -2498,6 +2516,7 @@ function connectBedrockClient(username, acc, route) {
       const nextFail = (reconnectFailCount[username] || 0) + 1;
       if (st && st.bot === client && (nextFail <= 2 || nextFail % 10 === 0)) {
         console.warn(`[Diagnose] [${username}] NetherNet-Aufbau gescheitert (${info.reason || 'ohne Grund'}) - Verlauf: ${(info.events || []).join(', ') || 'keine Zustandswechsel'} - zuletzt ICE ${info.iceState || '-'}, WebRTC ${info.pcState || '-'}`);
+        console.warn(`[Diagnose] [${username}] Adressen - Server bietet: ${formatNnCandidates(st.nnServer)} | wir bieten: ${formatNnCandidates(st.nnOwn)}`);
       }
       bedrockServerUnreachable(username, client, m
         ? `NetherNet-Verbindung (UDP) kam nicht zustande (${codeText}Code ${m[1]})`
