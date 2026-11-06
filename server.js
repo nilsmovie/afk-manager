@@ -37,6 +37,11 @@ const {
 const minecraftFolderPath = require('minecraft-folder-path');
 
 const app = express();
+// Fuer eigene Erweiterungen (siehe "Schnittstelle fuer eigene Erweiterungen" weiter unten):
+// wer jede Chat-Zeile des primaeren Accounts mitlesen will, und Zusatz-Skripte fuer die
+// Verwaltungsseite (bekommt nur der Owner)
+const chatListeners = [];
+const extAdminScripts = [];
 const server = http.createServer(app);
 const io = new Server(server);
 
@@ -789,6 +794,13 @@ app.post('/api/sessions/end-others', requireOwner, (req, res) => {
   }
   auditWeb(req, 'Alle anderen Geräte abgemeldet', null, `${n} Anmeldung(en) beendet`);
   res.json({ ok: true, ended: n });
+});
+
+// Skripte, die Erweiterungen fuer die Verwaltungsseite mitbringen - nur fuer den Owner
+app.get('/erweiterungen/admin.js', (req, res) => {
+  res.type('application/javascript').set('Cache-Control', 'no-store');
+  if (!req.user || req.user.role !== 'owner') return res.send('');
+  res.send(extAdminScripts.map((code) => `;(function () {\n${code}\n})();`).join('\n'));
 });
 
 app.get(['/', '/index.html'], (req, res) => {
@@ -1817,6 +1829,13 @@ function logChat(username, text) {
     pruneChatHistory();
     io.emit('chat', entry);
     queueDiscordChatLine(text, entry.ts);
+    for (const fn of chatListeners) {
+      try {
+        fn({ account: username, text, ts: entry.ts });
+      } catch (e) {
+        console.error('Erweiterung (Chat) Fehler:', e.message);
+      }
+    }
   }
 }
 
@@ -3402,8 +3421,33 @@ io.on('connection', (socket) => {
   });
 });
 
+// ---------- Schnittstelle fuer eigene Erweiterungen (Ordner "erweiterungen") ----------
 // Weitere Kanaele, in denen !-Befehle gelten (von Erweiterungen freigegeben)
 const extraCommandChannels = new Set();
+
+function isAccountOnline(username) {
+  const s = bots[username];
+  return !!(s && s.bot && s.status === 'online');
+}
+
+// Was jede Erweiterung bekommt. Die Discord-Teile setzt der Discord-Block unten dazu
+// (ohne eingerichteten Bot bleibt discordClient null).
+const extApi = {
+  app,
+  requireOwner,
+  requireAdmin,
+  auditWeb,
+  onChat: (fn) => { if (typeof fn === 'function') chatListeners.push(fn); },
+  addAdminScript: (code) => { extAdminScripts.push(String(code)); },
+  sendChatMessage,
+  logChat,
+  getAccounts: () => accounts,
+  isAccountOnline,
+  colors: { info: DISCORD_COLOR_INFO, ok: DISCORD_COLOR_OK, warn: DISCORD_COLOR_WARN, danger: DISCORD_COLOR_DANGER },
+  discordClient: null,
+  botChannelId: DISCORD_CHANNEL_ID,
+  addCommandChannel: (id) => { if (id) extraCommandChannels.add(String(id)); },
+};
 
 function loadExtensions(api) {
   const dir = path.join(__dirname, 'erweiterungen');
@@ -3452,11 +3496,6 @@ if (DISCORD_BOT_TOKEN && DISCORD_CHANNEL_ID) {
   }, DISCORD_READY_WAIT_MS + 1000);
 
   const EPHEMERAL = MessageFlags.Ephemeral;
-
-  function isAccountOnline(username) {
-    const s = bots[username];
-    return !!(s && s.bot && s.status === 'online');
-  }
 
   // Schreibt ins Log, WARUM ein Discord-Klick nicht geklappt hat
   function logInteractionProblem(where, e) {
@@ -3725,24 +3764,8 @@ if (DISCORD_BOT_TOKEN && DISCORD_CHANNEL_ID) {
     message.react('✅').catch(() => {});
   });
 
-  // ---------- Eigene Erweiterungen ----------
-  // Liegen im Ordner "erweiterungen" .js-Dateien, werden sie hier geladen. Der Ordner gehoert
-  // nicht zum Projekt (.gitignore) - fuer Ergaenzungen, die nur auf diesem Rechner laufen.
-  // Jede Datei exportiert eine Funktion, die das Objekt unten bekommt.
-  loadExtensions({
-    discordClient,
-    botChannelId: DISCORD_CHANNEL_ID,
-    addCommandChannel: (id) => { if (id) extraCommandChannels.add(String(id)); },
-    hasAllowedRole,
-    denyWithoutRole,
-    logInteractionProblem,
-    sendChatMessage,
-    logChat,
-    auditDiscord,
-    getAccounts: () => accounts,
-    isAccountOnline,
-    colors: { info: DISCORD_COLOR_INFO, warn: DISCORD_COLOR_WARN, danger: DISCORD_COLOR_DANGER },
-  });
+  // Discord-Teile fuer die Erweiterungen (geladen werden sie nach diesem Block)
+  Object.assign(extApi, { discordClient, hasAllowedRole, denyWithoutRole, logInteractionProblem, auditDiscord });
 
   // Erst einloggen, wenn der Webserver wirklich laeuft - eine doppelt gestartete Instanz
   // (Port belegt) verbindet sich so gar nicht erst mit Discord.
@@ -3756,6 +3779,12 @@ if (DISCORD_BOT_TOKEN && DISCORD_CHANNEL_ID) {
 } else if (DISCORD_WEBHOOK_URL) {
   console.log('Discord: nur Webhook-Benachrichtigungen aktiv (kein Bot-Token/Kanal fuer Ruecksenden gesetzt).');
 }
+
+// ---------- Eigene Erweiterungen ----------
+// Liegen im Ordner "erweiterungen" .js-Dateien, werden sie hier geladen. Der Ordner gehoert
+// nicht zum Projekt (.gitignore) - fuer Ergaenzungen, die nur auf diesem Rechner laufen.
+// Jede Datei exportiert eine Funktion, die das Objekt extApi (oben) bekommt.
+loadExtensions(extApi);
 
 // ---------- Discord: taegliche Uptime-Zusammenfassung ----------
 // Laeuft um 00:00 Uhr und zeigt die vollen 24h des ABGELAUFENEN Tages.
