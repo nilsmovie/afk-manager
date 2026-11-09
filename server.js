@@ -847,6 +847,10 @@ function loadAccounts() {
         // Soll bei "anderswo eingeloggt" eine Discord-Nachricht kommen? Neue Accounts bekommen
         // beim Anlegen "aus"; aeltere Eintraege ohne diese Angabe bleiben wie bisher "an".
         notifyElsewhere: a.notifyElsewhere !== false,
+        // Offene "anderswo eingeloggt"-Meldung mit Start-Knopf (wird beim naechsten Start aktualisiert)
+        elsewhereNotice: a.elsewhereNotice && a.elsewhereNotice.channelId && a.elsewhereNotice.messageId
+          ? { channelId: String(a.elsewhereNotice.channelId), messageId: String(a.elsewhereNotice.messageId) }
+          : undefined,
       }));
       // Falls (z.B. nach einem Update) noch niemand als bevorzugte Chat-Quelle markiert ist,
       // ist das per Definition der erste Account in der Liste.
@@ -1001,6 +1005,9 @@ function requestBotStart(username, opts = {}) {
   if (bots[username] && bots[username].bot) return; // laeuft schon
   if (bots[username] && bots[username].pendingStart) return; // Bedrock: wartet gerade auf die Transport-Wahl
   if (currentlyProcessing === username) return; // wird gerade schon versucht
+  // Wer/was startet? Steht spaeter in der aktualisierten "anderswo eingeloggt"-Meldung
+  if (opts.source) startSources[username] = opts.source;
+  else delete startSources[username];
   if (isBedrockAccount(username)) {
     if (opts.manual) {
       bedrockPause.waiting.delete(username);
@@ -1610,6 +1617,54 @@ function notifyDiscordChannelWithStartButton(username, text) {
   return discordSend('notify', { content: text, components: [startButtonRow(username)] });
 }
 
+// ---------- "anderswo eingeloggt"-Meldung aktualisieren ----------
+// Die Meldung (mit Start-Knopf) wird pro Account gemerkt - auch ueber einen Neustart hinweg
+// (accounts.json). Startet der Account danach auf irgendeinem Weg (Dashboard, !start,
+// Neustart des Managers ...), wird sie bearbeitet wie bei einem Klick auf den Knopf.
+const startSources = {}; // username -> z.B. "über das Dashboard (nils)"
+const discordReadyWaiters = []; // laufen, sobald der Discord-Bot verbunden ist
+
+function rememberElsewhereNotice(username, sent) {
+  const acc = accounts.find((a) => a.username === username);
+  if (!acc || !sent || !sent.id || !sent.channelId) return;
+  acc.elsewhereNotice = { channelId: String(sent.channelId), messageId: String(sent.id) };
+  saveAccounts();
+}
+
+function forgetElsewhereNotice(username, onlyMessageId) {
+  const acc = accounts.find((a) => a.username === username);
+  if (!acc || !acc.elsewhereNotice) return null;
+  if (onlyMessageId && acc.elsewhereNotice.messageId !== String(onlyMessageId)) return null;
+  const notice = acc.elsewhereNotice;
+  delete acc.elsewhereNotice;
+  saveAccounts();
+  return notice;
+}
+
+function resolveElsewhereNotice(username) {
+  const source = startSources[username];
+  delete startSources[username];
+  const acc = accounts.find((a) => a.username === username);
+  if (!acc || !acc.elsewhereNotice || !discordClient || instanceIdle) return;
+  const notice = forgetElsewhereNotice(username);
+  const time = new Date().toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+  const edit = async () => {
+    try {
+      const channel = await discordClient.channels.fetch(notice.channelId);
+      const msg = await channel.messages.fetch(notice.messageId);
+      await msg.edit({
+        content: `${msg.content}\n\n▶️ **${username}** wurde${source ? ` ${source}` : ''} wieder gestartet (${time} Uhr).`,
+        components: [],
+        allowedMentions: { parse: [] },
+      });
+    } catch (e) {
+      console.warn(`Discord: "anderswo eingeloggt"-Meldung von ${username} konnte nicht aktualisiert werden (${e.message})`);
+    }
+  };
+  if (discordReady) edit();
+  else discordReadyWaiters.push(edit);
+}
+
 // ---------- Discord: Chat-Spiegel (Minecraft-Chat -> eigener Discord-Kanal) ----------
 let discordChatBuffer = [];
 
@@ -1841,6 +1896,8 @@ function logChat(username, text) {
 
 // ---------- Bot-Steuerung ----------
 function startBot(username) {
+  // Haengt noch eine "anderswo eingeloggt"-Meldung mit Start-Knopf? Dann jetzt aktualisieren.
+  if (!(bots[username] && bots[username].bot)) resolveElsewhereNotice(username);
   if (isBedrockAccount(username)) {
     startBedrockBot(username);
     return;
@@ -2002,7 +2059,7 @@ function startBot(username) {
         notifyDiscordChannelWithStartButton(
           username,
           `🔐 **${username}** ist anderswo eingeloggt. Kein Auto-Reconnect – klick unten, wenn du fertig gespielt hast:`
-        );
+        ).then((sent) => rememberElsewhereNotice(username, sent)).catch(() => {});
       }
     } else {
       queueKickNotification(username, readableReason);
@@ -3365,7 +3422,7 @@ app.post('/api/start-all', (req, res) => {
   // User-Rollen wird automatisch nur auf ihre erlaubten Accounts begrenzt.
   accounts
     .filter((acc) => canAccessAccount(req.user, acc.username))
-    .forEach((acc) => requestBotStart(acc.username, { manual: true }));
+    .forEach((acc) => requestBotStart(acc.username, { manual: true, source: `über „Alle starten“ im Dashboard (${req.user ? req.user.username : '?'})` }));
   auditWeb(req, 'Alle gestartet');
   res.json({ ok: true });
 });
@@ -3379,7 +3436,7 @@ app.post('/api/stop-all', (req, res) => {
 });
 
 app.post('/api/start/:username', requireAccountAccess, (req, res) => {
-  requestBotStart(req.params.username, { manual: true });
+  requestBotStart(req.params.username, { manual: true, source: `über das Dashboard (${req.user ? req.user.username : '?'})` });
   auditWeb(req, 'Gestartet', req.params.username);
   res.json({ ok: true });
 });
@@ -3486,6 +3543,7 @@ if (DISCORD_BOT_TOKEN && DISCORD_CHANNEL_ID) {
     await resolveDiscordTargets();
     discordReady = true;
     flushDiscordPending();
+    discordReadyWaiters.splice(0).forEach((fn) => fn());
   });
   // Kommt der Bot nicht rechtzeitig online, gehen die aufgehobenen Meldungen per Webhook raus
   setTimeout(() => {
@@ -3538,8 +3596,9 @@ if (DISCORD_BOT_TOKEN && DISCORD_CHANNEL_ID) {
           if (e && e.code === 40060) otherInstance = true;
         });
         if (!otherInstance) {
+          forgetElsewhereNotice(username, interaction.message.id);
           auditDiscord(interaction.user, interaction.channel, 'Gestartet (Knopf)', username);
-          requestBotStart(username, { manual: true });
+          requestBotStart(username, { manual: true, source: `über den Knopf (${interaction.user.username})` });
         }
         return;
       }
@@ -3686,7 +3745,7 @@ if (DISCORD_BOT_TOKEN && DISCORD_CHANNEL_ID) {
           return;
         }
         accounts.forEach((a) => {
-          if (action === 'start') requestBotStart(a.username, { manual: true });
+          if (action === 'start') requestBotStart(a.username, { manual: true, source: `per „!start all“ von ${message.author.username}` });
           else stopBot(a.username);
         });
         auditDiscord(message.author, message.channel, action === 'start' ? 'Alle gestartet' : 'Alle gestoppt');
@@ -3705,7 +3764,7 @@ if (DISCORD_BOT_TOKEN && DISCORD_CHANNEL_ID) {
         return;
       }
 
-      if (action === 'start') requestBotStart(matchedAccount.username, { manual: true });
+      if (action === 'start') requestBotStart(matchedAccount.username, { manual: true, source: `per !start von ${message.author.username}` });
       else stopBot(matchedAccount.username);
       auditDiscord(message.author, message.channel, action === 'start' ? 'Gestartet' : 'Gestoppt', matchedAccount.username);
       message.react('✅').catch(() => {});
@@ -3888,7 +3947,7 @@ server.listen(PORT, () => {
     if (!bots[acc.username]) {
       bots[acc.username] = { bot: null, status: 'Warteschlange...', hideTimer: null, autoChatTimers: [], manualStop: false, hasSpawnedThisConnection: false };
     }
-    requestBotStart(acc.username);
+    requestBotStart(acc.username, { source: 'nach einem Neustart des AFK-Managers' });
   });
   broadcastAccountList();
 
