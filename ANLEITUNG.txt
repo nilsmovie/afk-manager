@@ -43,6 +43,8 @@ Damit entsteht der Ordner "afk-manager" mit allen Programmdateien. Beim
 Betrieb kommen weitere Dateien dazu:
    accounts.json, accounts.backup.json   (deine Minecraft-Accounts)
    users.json, users.backup.json         (Dashboard-Benutzer, Passwörter gehasht)
+   servers.json, verbindungen.json       (nur bei mehreren Servern, Abschnitt 5b)
+   accounts.vor-mehrserver.json          (einmalige Sicherung, Abschnitt 5b)
    audit.log                             (Protokoll, Abschnitt 10)
    .env                                  (deine Einstellungen)
 Diese Dateien sind privat - siehe Abschnitt 9.
@@ -77,8 +79,9 @@ Punkt "npm install bricht ab". Das betrifft nur die Bedrock-Unterstützung.
    MC_SERVER_PORT       Meist 25565
    MC_BEDROCK_PORT      Meist 19132 (nur für Bedrock-Accounts)
 
-Wenn du MC_SERVER_HOST nicht änderst, verbinden sich die Accounts mit
-clashsmp.de. Alle Einstellungen sind in der .env.example erklärt.
+In der .env.example steht bei MC_SERVER_HOST schon clashsmp.de. Löschst du den
+Eintrag, startet kein Account (der Manager sagt das im Log, im Dashboard und
+in Discord). Alle Einstellungen sind in der .env.example erklärt.
 
 
 ------------------------------------------------------------------------------
@@ -174,6 +177,88 @@ Gut zu wissen:
 
 
 ------------------------------------------------------------------------------
+ 5b. MEHRERE SERVER (OPTIONAL)
+------------------------------------------------------------------------------
+
+Ein Account kann zusätzlich auf weiteren Servern online sein, z.B. auf
+clashsmp.de UND auf deinem eigenen Server. Wer das nicht nutzt, merkt davon
+nichts: Alle Accounts laufen wie immer auf dem Standardserver aus der .env.
+
+Server anlegen (Owner und Admins):
+   Verwaltung -> Karte "Server" -> "+ Server hinzufügen":
+      Name          z.B. Lobby (so heißt er im Dashboard und in Discord)
+      Kürzel        für Discord, z.B. lobby  ->  !start NilsMovie@lobby
+                    (leer lassen = wird aus dem Namen gebildet, bleibt fest)
+      Adresse       ohne Port, z.B. play.beispiel.net oder 192.168.1.20
+      Java-Port     leer = auf diesem Server keine Java-Accounts
+      Bedrock-Port  leer = auf diesem Server keine Bedrock-Accounts
+   Derselbe Server (gleiche Adresse und gleicher Port) lässt sich nicht
+   zweimal eintragen - der Account würde sich sonst selbst rauswerfen.
+   Auto-Chat-Vorlage: Befehle, die jede NEUE Verbindung zu diesem Server als
+   Auto-Chat bekommt (beim Standardserver: jeder neue Account). Bestehende
+   bleiben unverändert.
+   Den Standardserver änderst du nur in der .env.
+
+Account auf einen weiteren Server schicken:
+   Dashboard -> beim Account "+ Server" -> Server wählen -> "Hinzufügen und
+   starten". Unter dem Account erscheint eine Zeile "↳ Servername" mit eigenem
+   Status, Start/Stop, Online-Zeit, ★ (Chat-Quelle für diesen Server), 🔔,
+   ⚙️ (eigener Auto-Chat) und ✕ (vom Server entfernen - auf dem Standardserver
+   bleibt der Account).
+   Wie beim ersten Join auf dem Standardserver kommt der Auto-Chat erst ab dem
+   zweiten Einloggen auf DIESEM Server.
+
+Was wo gilt:
+   Pro Account       Microsoft-Login (kein zweiter Code), Rechte der User
+                     (wer einen Account bedienen darf, darf es auf allen Servern)
+   Pro Verbindung    Status, Auto-Chat, Glocke, Online-Zeit, Reconnect
+   Pro Server        Chat und Chat-Quelle, Kick-Sammelmeldungen,
+                     "Alle offline/online", Bedrock-Pause
+   Für alle          Die Warteschlange: es verbindet sich immer nur EINE
+                     Verbindung gleichzeitig, über alle Server. Wartet ein
+                     Account auf seinen Login-Code, warten seine anderen
+                     Verbindungen, bis er angemeldet ist.
+
+Chat: Oben im Chat-Fenster wählst du, von welchem Server du den Chat siehst
+(die Auswahl erscheint erst, wenn es weitere Server mit Java-Accounts gibt).
+Gesendet wird über einen Account auf diesem Server. Der Discord-Chat-Kanal
+und Erweiterungen bekommen weiterhin nur den Chat vom Standardserver.
+
+Discord: An den Accountnamen "@kürzel" hängen (oder den Servernamen):
+   !start NilsMovie@lobby      !stop NilsMovie@alle (auf allen Servern)
+   !mc NilsMovie@lobby hallo   !primary NilsMovie@lobby
+   !add NilsMovie@lobby        (bestehenden Account zusätzlich dorthin)
+Ohne @ gilt wie bisher der Standardserver. Meldungen nennen den Server, z.B.
+"NilsMovie (Lobby) ist anderswo eingeloggt".
+
+Schalter in der .env:
+   MULTI_SERVER_JAVA=0         Java auf weiteren Servern aus (Standard: an)
+   MULTI_SERVER_BEDROCK=1      Bedrock auf weiteren Servern an (Standard: aus)
+   MULTI_SERVER_BEDROCK_MAX=2  höchstens so viele Bedrock-Verbindungen zu
+                               weiteren Servern (Standard 2)
+   Ist ein Schalter aus, ruhen die schon angelegten Verbindungen (Status sagt
+   warum) und es lassen sich keine neuen anlegen.
+
+Bedrock auf weiteren Servern zuerst testen:
+   Jede Bedrock-Verbindung läuft in einem eigenen Thread (ca. 80 MB RAM, bei
+   vielen Entities spürbar CPU). Nimm für den ersten Test einen Ersatz-Account,
+   lass es 30 Minuten laufen und vergleiche die Diagnose-Zeilen vorher/nachher:
+      sudo journalctl -u afk-manager --since "30 min ago" | grep "Diagnose\] RAM"
+   Kommt "anderswo eingeloggt", gehören die beiden Server zum selben Netzwerk
+   (z.B. Unterserver hinter demselben Proxy) - dann geht das nicht.
+   Die Bedrock-Pause gilt pro Server: nimmt der zweite Server gerade keine
+   Bedrock-Verbindungen an, warten nur die Accounts dort.
+
+Update und Zurück:
+   Beim ersten Start der Mehrserver-Version legt der Manager einmalig
+   accounts.vor-mehrserver.json an (unveränderte Kopie). accounts.json behält
+   ihr altes Format, die weiteren Server stehen in eigenen Dateien
+   (servers.json, verbindungen.json), die ältere Versionen einfach ignorieren.
+   Zurück zur älteren Version geht also jederzeit (Abschnitt 8) - die Accounts
+   laufen dann wieder nur auf dem Standardserver, ohne neuen Login.
+
+
+------------------------------------------------------------------------------
  6. BENUTZER UND ROLLEN
 ------------------------------------------------------------------------------
 
@@ -181,7 +266,8 @@ Oben rechts im Dashboard gibt es für Owner und Admins den Button "Verwaltung".
 
    Owner   Darf alles, inklusive Admins anlegen und löschen.
    Admin   Sieht alle Accounts, darf normale Benutzer anlegen, löschen und
-           ihnen Accounts zuweisen. Admins und Owner kann er nicht ändern.
+           ihnen Accounts zuweisen, Server anlegen (Abschnitt 5b). Admins und
+           Owner kann er nicht ändern.
    User    Sieht und bedient nur die zugewiesenen Minecraft-Accounts: Start/Stop,
            Chat und Steuerung. Kein Hinzufügen, Umbenennen oder Entfernen.
 
@@ -231,12 +317,19 @@ b) Bot (für Befehle und Buttons):
 
    Befehle im Bot-Kanal:
       !mc Account Text          Text oder /Befehl über den Account senden
-      !start Account | all      Account (oder alle) starten
-      !stop Account | all       Account (oder alle) stoppen
-      !list                     Status aller Accounts
+      !start Account | all      Account (oder alle, auf allen Servern) starten
+      !stop Account | all       Account (oder alle, auf allen Servern) stoppen
+      !list                     Status aller Accounts (weitere Server eingerückt)
       !primary Account          Chat-Quelle festlegen
       !rename Alt Neu           Account umbenennen
       !add Name                 Account hinzufügen
+   Weitere Server: Account@kürzel bzw. Account@alle (siehe Abschnitt 5b).
+
+   "Alle Accounts wieder online" kommt nur nach einem echten Ausfall: nach
+   "Alle offline", nach einem Server-Neustart (Massen-Kick), nach dem Start des
+   Managers oder wenn ein Account länger als 10 Minuten weg war. Fliegt nur ein
+   Account kurz raus und ist gleich wieder da, kommt keine Meldung.
+   Einstellbar: DISCORD_ALL_ONLINE_AFTER_MIN=10 in der .env.
 
    Klappt ein Klick auf einen Discord-Knopf nicht, steht der Grund im Log
    (Zeile mit [Diagnose]): "kam zu spät an" = Programm war ausgelastet, einfach
@@ -287,6 +380,12 @@ Updates einspielen (im Ordner afk-manager):
    git pull
    npm install
    danach neu starten (pm2 restart afk-manager bzw. sudo systemctl restart afk-manager)
+
+Macht ein Update Probleme, zurück auf die vorige Version:
+   git log --oneline          Versionen ansehen
+   git checkout <nummer>      z.B. git checkout a1b2c3d
+   neu starten wie oben; später mit  git checkout main  wieder auf den neuesten Stand.
+Was sich in einer Version geändert hat, steht in CHANGELOG.md.
 
 Deine .env, accounts.json und users.json bleiben dabei unverändert. Ändere die
 Programmdateien nicht selbst, sonst bricht "git pull" ab.
@@ -416,7 +515,8 @@ Schutz gegen Dauer-Neuverbindungen (Bedrock)
    Hunderte Neuverbindungen pro Nacht können dazu führen, dass der Server bzw.
    sein DDoS-Schutz unsere IP eine Weile sperrt. Deshalb:
     - Bedrock-Pause: Scheitern 5 Verbindungsversuche hintereinander und ist KEIN
-      Bedrock-Account online, warten alle Bedrock-Accounts 15 Minuten
+      Bedrock-Account online, warten alle Bedrock-Accounts 15 Minuten (gilt pro
+      Server - bei mehreren Servern nur die Accounts auf dem betroffenen Server)
       (Status "Bedrock-Pause bis HH:MM"). Danach probiert es EIN Account. Klappt
       es, kommen die anderen der Reihe nach; sonst wieder 15 Minuten Pause.
       Log:  [Bedrock] 5 Verbindungsversuche hintereinander gescheitert ...
@@ -462,8 +562,10 @@ Protokoll: wer hat was gemacht (Webseite und Discord)
    Jede Aktion wird mit Uhrzeit festgehalten:
     - Webseite: Anmeldung (auch fehlgeschlagene), Abmeldung, Accounts anlegen,
       löschen, umbenennen, starten, stoppen, Chat/Befehle, Stern, Glocke,
-      Auto-Chat, Benutzer anlegen/ändern/löschen, Passwortänderungen - jeweils
-      mit Benutzer, IP-Adresse und Gerät (z.B. "iPhone / Safari").
+      Auto-Chat, Benutzer anlegen/ändern/löschen, Passwortänderungen, Server
+      und Verbindungen anlegen/ändern/entfernen (mit Server, z.B.
+      "NilsMovie@lobby") - jeweils mit Benutzer, IP-Adresse und Gerät
+      (z.B. "iPhone / Safari").
     - Discord: alle !-Befehle, Start-Knöpfe, Chat über !mc - jeweils mit
       Discord-Name, Discord-ID und Kanal. Auch abgelehnte Versuche ohne
       Berechtigung.
@@ -505,4 +607,5 @@ laufen auf jedem Minecraft-Server. Folgendes ist aber auf clashsmp.de
 zugeschnitten und sieht woanders evtl. anders aus:
  - Die Formatierung der Chat-Spiegelung in Discord (Rang-Tags wie "[Spieler]",
    Shop- und Tipp-Nachrichten).
- - Ohne Eintrag bei MC_SERVER_HOST verbinden sich die Accounts mit clashsmp.de.
+ - In der .env.example ist clashsmp.de als Standardserver eingetragen (im
+   Programm selbst ist kein Server fest eingebaut).
