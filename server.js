@@ -1575,6 +1575,7 @@ function handleMsaCode(username, attempt, data, label) {
   broadcastAccountList();
   io.emit('msa-code', {
     username,
+    label: connLabel(username),
     userCode: data.user_code,
     verificationUri: data.verification_uri,
     directUri: msaDirectLink(data),
@@ -2250,6 +2251,29 @@ function isPrimaryRunning() {
   return !!(primary && bots[primary] && bots[primary].bot);
 }
 
+// Chat-Quelle eines weiteren Servers - wird jedes Mal neu bestimmt: die per Stern gewuenschte
+// Verbindung, wenn sie online ist, sonst die oberste Java-Verbindung, die gerade online ist.
+// (Bedrock-Accounts lesen den Chat nicht mit und koennen deshalb keine Chat-Quelle sein.)
+function chatSourceOf(serverId) {
+  if (!serverId || serverId === DEFAULT_SERVER_ID) return getPrimaryUsername();
+  const keys = allConnKeys().filter((k) => connServerId(k) === serverId && !isBedrockAccount(connUser(k)));
+  if (keys.length === 0) return null;
+  const online = (k) => bots[k] && bots[k].status === 'online';
+  const preferred = keys.find((k) => (connSettings(k) || {}).preferredChatSource);
+  if (preferred && online(preferred)) return preferred;
+  return keys.find(online) || preferred || keys[0];
+}
+function chatSourceRunning(serverId) {
+  const k = chatSourceOf(serverId);
+  return !!(k && bots[k] && bots[k].bot);
+}
+// Chat-Status aller Server fuers Dashboard: { standard: { primary, active }, lobby: {...} }
+function chatStatusAll() {
+  const out = {};
+  for (const sv of servers) out[sv.id] = { primary: chatSourceOf(sv.id), active: chatSourceRunning(sv.id) };
+  return out;
+}
+
 function pruneChatHistory() {
   const cutoff = Date.now() - CHAT_HISTORY_MS;
   chatHistory = chatHistory.filter((m) => m.ts >= cutoff);
@@ -2288,6 +2312,7 @@ function accountListForClient(viewerUser) {
         serverName: sv ? sv.name : c.server,
         status: bots[key] ? bots[key].status : 'gestoppt',
         uptimeMs: getUptimeMs(key),
+        isPrimary: key === chatSourceOf(c.server),
         autoChat: c.autoChat || [],
         notifyElsewhere: c.notifyElsewhere !== false,
       };
@@ -2307,7 +2332,7 @@ function broadcastAccountList() {
   }
   // Die echte, globale Chat-Quelle wird bewusst UNGEFILTERT an alle gesendet (Transparenz),
   // auch wenn sie fuer eingeschraenkte Nutzer nicht in ihrer eigenen Liste auftaucht.
-  io.emit('chat-status', { primary: getPrimaryUsername(), active: isPrimaryRunning() });
+  io.emit('chat-status', { primary: getPrimaryUsername(), active: isPrimaryRunning(), servers: chatStatusAll() });
 
   const total = fullList.length;
   const online = fullList.filter((a) => a.status === 'online').length;
@@ -2334,16 +2359,28 @@ function broadcastAccountList() {
 
 function logChat(username, text) {
   console.log(`[${username}] ${text}`);
+  const serverId = connServerId(username);
+  if (serverId !== DEFAULT_SERVER_ID) {
+    // Weiterer Server: nur ins Dashboard (Discord-Chat-Spiegel und Erweiterungen bekommen
+    // weiterhin nur den Chat vom Standardserver)
+    if (username === chatSourceOf(serverId)) {
+      const entry = { username, text, ts: Date.now(), server: serverId };
+      chatHistory.push(entry);
+      pruneChatHistory();
+      io.emit('chat', entry);
+    }
+    return;
+  }
   // Nur Nachrichten des primaeren Accounts werden an die Clients gesendet/gespeichert
   if (username === getPrimaryUsername()) {
-    const entry = { username, text, ts: Date.now() };
+    const entry = { username, text, ts: Date.now(), server: DEFAULT_SERVER_ID };
     chatHistory.push(entry);
     pruneChatHistory();
     io.emit('chat', entry);
     queueDiscordChatLine(text, entry.ts);
     for (const fn of chatListeners) {
       try {
-        fn({ account: username, text, ts: entry.ts });
+        fn({ account: username, text, ts: entry.ts, server: DEFAULT_SERVER_ID });
       } catch (e) {
         console.error('Erweiterung (Chat) Fehler:', e.message);
       }
@@ -2488,7 +2525,7 @@ function startBot(username) {
     // anderen blieb nur eine doppelte Zeile in der Konsole uebrig. Bei vielen Accounts war
     // das jede Chatnachricht 15-20x im Log. Statusmeldungen ("--- eingeloggt ---" usw.)
     // laufen weiterhin fuer jeden Account ueber logChat.
-    if (username !== getPrimaryUsername()) return;
+    if (username !== chatSourceOf(connServerId(username))) return;
     logChat(username, jsonMsg.toString());
   });
 
@@ -3405,6 +3442,7 @@ app.get('/api/chat-state', (req, res) => {
   res.json({
     primary: getPrimaryUsername(),
     active: isPrimaryRunning(),
+    servers: chatStatusAll(),
     history: chatHistory,
   });
 });
@@ -3461,6 +3499,7 @@ app.post('/api/servers', requireManageRights, (req, res) => {
   servers.push(r.value);
   saveServers();
   auditServer(req, 'Server angelegt', r.value, serverDetail(r.value));
+  io.emit('servers-changed');
   securityNotice(`🌐 Server **${r.value.name}** (${r.value.host}) wurde im Dashboard von **${req.user.username}** angelegt`, loginClientIp(req), audit.deviceFromUA(req.headers['user-agent']));
   res.json({ ok: true, server: serverForClient(r.value, req.user) });
 });
@@ -3490,6 +3529,7 @@ app.put('/api/servers/:id', requireManageRights, (req, res) => {
   if (before.name === sv.name && before.detail === after) return res.json({ ok: true, server: serverForClient(sv, req.user) });
   saveServers();
   broadcastAccountList();
+  io.emit('servers-changed');
   auditServer(req, 'Server geändert', sv, `${before.name !== sv.name ? `Name "${before.name}" → "${sv.name}"; ` : ''}${before.detail} → ${after}`);
   res.json({ ok: true, server: serverForClient(sv, req.user) });
 });
@@ -3505,6 +3545,7 @@ app.delete('/api/servers/:id', requireManageRights, (req, res) => {
   servers = servers.filter((o) => o !== sv);
   saveServers();
   auditServer(req, 'Server gelöscht', sv, serverDetail(sv));
+  io.emit('servers-changed');
   securityNotice(`🗑️ Server **${sv.name}** (${sv.host}) wurde im Dashboard von **${req.user.username}** gelöscht`, loginClientIp(req), audit.deviceFromUA(req.headers['user-agent']));
   res.json({ ok: true });
 });
@@ -3670,6 +3711,20 @@ function reevaluateChatSource() {
 }
 
 app.post('/api/accounts/:username/make-primary', requireManageRights, (req, res) => {
+  const key = req.params.username;
+  if (!isDefaultConn(key)) {
+    // Weiterer Server: Stern nur unter den Verbindungen dieses Servers
+    if (!connectionExists(key)) return res.status(404).json({ error: 'Verbindung nicht gefunden' });
+    if (isBedrockAccount(connUser(key))) return res.status(400).json({ error: 'Bedrock-Accounts können keine Chat-Quelle sein' });
+    const sid = connServerId(key);
+    extraConnections.forEach((c) => {
+      if (c.server === sid) c.preferredChatSource = c.username === connUser(key);
+    });
+    saveExtraConnections();
+    broadcastAccountList();
+    auditWeb(req, 'Chat-Quelle festgelegt', key);
+    return res.json({ ok: true });
+  }
   const ok = makeAccountPrimary(req.params.username);
   if (!ok) return res.status(404).json({ error: 'Account nicht gefunden' });
   auditWeb(req, 'Chat-Quelle festgelegt', req.params.username);
@@ -4165,6 +4220,7 @@ io.on('connection', (socket) => {
   socket.emit('chat-state', {
     primary: getPrimaryUsername(),
     active: isPrimaryRunning(),
+    servers: chatStatusAll(),
     history: chatHistory,
   });
 });
@@ -4187,10 +4243,12 @@ const extApi = {
   auditWeb,
   onChat: (fn) => { if (typeof fn === 'function') chatListeners.push(fn); },
   addAdminScript: (code) => { extAdminScripts.push(String(code)); },
-  sendChatMessage,
+  // Optionaler dritter/zweiter Parameter: Kuerzel eines weiteren Servers (ohne = Standardserver)
+  sendChatMessage: (name, text, server) => sendChatMessage(server ? connKey(name, server) : name, text),
   logChat,
   getAccounts: () => accounts,
-  isAccountOnline,
+  isAccountOnline: (name, server) => isAccountOnline(server ? connKey(name, server) : name),
+  getServers: () => servers.map((sv) => ({ id: sv.id, name: sv.name, isDefault: !!sv.isDefault })),
   colors: { info: DISCORD_COLOR_INFO, ok: DISCORD_COLOR_OK, warn: DISCORD_COLOR_WARN, danger: DISCORD_COLOR_DANGER },
   discordClient: null,
   botChannelId: DISCORD_CHANNEL_ID,

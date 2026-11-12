@@ -23,7 +23,11 @@ const PHASE = Number(process.env.TEST_PHASE || 1)
 const RealDate = Date
 const realNow = RealDate.now.bind(RealDate)
 const t0 = realNow()
-let sprung = 0
+// Testuhr startet immer um 10:00 Uhr (Zeitraffer laeuft sonst je nach echter Uhrzeit ueber
+// Mitternacht - dann setzt die Tagesstatistik mitten im Test zurueck)
+const startUhr = new RealDate(t0)
+startUhr.setHours(szenario.uhrzeit != null ? szenario.uhrzeit : 10, 0, 0, 0)
+let sprung = startUhr.getTime() - t0
 const fakeNow = () => Math.round(t0 + (realNow() - t0) * SCALE + sprung)
 class FakeDate extends RealDate {
   constructor (...a) { if (a.length === 0) super(fakeNow()); else super(...a) }
