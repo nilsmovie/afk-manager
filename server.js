@@ -7,6 +7,7 @@ const fs = require('fs');
 const { Server } = require('socket.io');
 const mineflayer = require('mineflayer');
 const crypto = require('crypto');
+const net = require('net');
 const v8 = require('v8');
 const { promisify } = require('util');
 const { monitorEventLoopDelay } = require('perf_hooks');
@@ -88,9 +89,10 @@ server.on('error', (err) => {
   setInterval(() => console.error(meldung), 10 * 60 * 1000);
 });
 
-const MC_SERVER_HOST = process.env.MC_SERVER_HOST || 'clashsmp.de';
+// Standardserver: kommt immer aus der .env (MC_SERVER_HOST, MC_SERVER_PORT, MC_BEDROCK_PORT)
+const MC_SERVER_HOST = String(process.env.MC_SERVER_HOST || '').trim();
 // Name in den Seitentiteln des Dashboards (Standard: Adresse des Minecraft-Servers)
-const DASHBOARD_TITLE = (process.env.DASHBOARD_TITLE || MC_SERVER_HOST).trim();
+const DASHBOARD_TITLE = (process.env.DASHBOARD_TITLE || MC_SERVER_HOST || 'AFK-Manager').trim();
 const MC_SERVER_PORT = parseInt(process.env.MC_SERVER_PORT || '25565', 10);
 const MC_BEDROCK_PORT = parseInt(process.env.MC_BEDROCK_PORT || '19132', 10);
 // Sichtweite der Bots in Chunks. AFK-Bots brauchen keine Welt um sich herum - mit dem
@@ -943,6 +945,192 @@ function deleteBedrockCacheFiles(username) {
 
 let accounts = loadAccounts(); // [{ username, authType: 'premium', everJoined: bool, preferredChatSource: bool }]
 
+// ---------- Serverliste (servers.json) ----------
+// Der Standardserver steht NICHT in der Datei, er kommt immer aus der .env. In servers.json
+// stehen nur die weiteren Server und die Auto-Chat-Vorlagen. Aeltere Versionen kennen die
+// Datei nicht und ignorieren sie - ein Zurueck zur alten Version ist also jederzeit moeglich.
+const SERVERS_FILE = path.join(__dirname, 'servers.json');
+const SERVERS_BACKUP_FILE = path.join(__dirname, 'servers.backup.json');
+// Unveraenderte Kopie der accounts.json vom ersten Start der Mehrserver-Version
+const ACCOUNTS_PREMULTI_FILE = path.join(__dirname, 'accounts.vor-mehrserver.json');
+const SERVER_ID_RE = /^[a-z0-9](?:[a-z0-9-]{0,22}[a-z0-9])?$/;
+// "standard" ist der Standardserver, "alle" steht in Discord fuer alle Server
+const RESERVED_SERVER_IDS = new Set(['standard', 'default', 'alle', 'all']);
+const SERVER_NAME_RE = /^[\p{L}\p{N}][\p{L}\p{N} ._#()+-]{0,31}$/u;
+const HOSTNAME_RE = /^(?=.{1,253}$)[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*$/;
+const MAX_EXTRA_SERVERS = 20;
+const AUTOCHAT_TEMPLATE_MAX = 10;
+const AUTOCHAT_TEXT_MAX = 256;
+const AUTOCHAT_DELAY_MAX = 24 * 60 * 60;
+
+// Erste Sicherung vor der Mehrserver-Version: accounts.json einmalig unveraendert kopieren
+function backupAccountsBeforeMultiServer() {
+  try {
+    if (fs.existsSync(ACCOUNTS_FILE) && !fs.existsSync(ACCOUNTS_PREMULTI_FILE)) {
+      fs.copyFileSync(ACCOUNTS_FILE, ACCOUNTS_PREMULTI_FILE, fs.constants.COPYFILE_EXCL);
+      console.log('[Server] Sicherung angelegt: accounts.vor-mehrserver.json (Stand vor der Mehrserver-Version)');
+    }
+  } catch (e) {
+    console.error('[Server] Sicherung accounts.vor-mehrserver.json fehlgeschlagen:', e.message);
+  }
+}
+
+function cleanText(v) {
+  return typeof v === 'string' ? v.replace(/[\u0000-\u001f\u007f]/g, '').trim() : '';
+}
+function parsePort(v) {
+  if (v === undefined || v === null || v === '') return { value: null };
+  const str = String(v).trim();
+  if (str === '') return { value: null };
+  if (!/^\d{1,5}$/.test(str)) return { error: 'Port muss eine Zahl von 1 bis 65535 sein' };
+  const n = parseInt(str, 10);
+  if (n < 1 || n > 65535) return { error: 'Port muss eine Zahl von 1 bis 65535 sein' };
+  return { value: n };
+}
+function normalizeHost(v) {
+  let h = cleanText(v).toLowerCase();
+  if (h.startsWith('[') && h.endsWith(']')) h = h.slice(1, -1); // [IPv6]
+  if (h.endsWith('.')) h = h.slice(0, -1);
+  return h;
+}
+function hostProblem(h) {
+  if (!h) return 'Adresse fehlt';
+  if (net.isIP(h)) return null;
+  if (/:\d+$/.test(h)) return 'Bitte die Adresse ohne Port eintragen - der Port kommt ins eigene Feld';
+  if (!HOSTNAME_RE.test(h)) return 'Ungültige Adresse (erlaubt: z.B. play.example.net oder 192.168.1.20)';
+  return null;
+}
+// Eine Auto-Chat-Aktion pruefen (fuer Vorlagen)
+function cleanAutoChatEntry(e) {
+  const text = cleanText(e && e.text);
+  if (!text) return { error: 'Text fehlt' };
+  if (text.length > AUTOCHAT_TEXT_MAX) return { error: `Text zu lang (max. ${AUTOCHAT_TEXT_MAX} Zeichen)` };
+  const str = String(e && e.delaySeconds !== undefined ? e.delaySeconds : '').trim();
+  if (!/^\d{1,6}$/.test(str)) return { error: 'Wartezeit muss eine ganze Zahl (Sekunden) sein' };
+  const delay = parseInt(str, 10);
+  if (delay > AUTOCHAT_DELAY_MAX) return { error: 'Wartezeit höchstens 24 Stunden' };
+  return { value: { text, delaySeconds: delay } };
+}
+function cleanTemplate(list) {
+  if (!Array.isArray(list)) return [];
+  return list.map(cleanAutoChatEntry).filter((r) => r.value).map((r) => r.value).slice(0, AUTOCHAT_TEMPLATE_MAX);
+}
+
+// Kuerzel aus dem Namen bauen: "Mein Lobby-Server" -> "mein-lobby-server"
+function serverIdFromName(name, taken) {
+  let base = String(name).toLowerCase()
+    .replace(/ä/g, 'ae').replace(/ö/g, 'oe').replace(/ü/g, 'ue').replace(/ß/g, 'ss')
+    .normalize('NFKD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
+    .slice(0, 20).replace(/-+$/, '');
+  if (!base || RESERVED_SERVER_IDS.has(base)) base = base ? `${base}-1` : 'server';
+  let id = base;
+  for (let i = 2; taken.has(id) || RESERVED_SERVER_IDS.has(id); i++) id = `${base}-${i}`;
+  return id;
+}
+
+// Eingaben fuer einen weiteren Server pruefen. others = alle anderen Server (inkl. Standardserver).
+// Gibt { value } oder { error } zurueck.
+function validateServerInput(body, { others, existing = null }) {
+  const b = body || {};
+  const name = cleanText(b.name !== undefined ? b.name : existing && existing.name);
+  if (!name) return { error: 'Name fehlt' };
+  if (!SERVER_NAME_RE.test(name)) return { error: 'Name: 1-32 Zeichen, Buchstaben, Ziffern, Leerzeichen und . _ # ( ) + -' };
+  if (others.some((o) => o.name.toLowerCase() === name.toLowerCase())) return { error: 'Einen Server mit diesem Namen gibt es schon' };
+
+  let id = existing ? existing.id : cleanText(b.id).toLowerCase();
+  const taken = new Set(others.map((o) => o.id));
+  if (!existing) {
+    if (!id) id = serverIdFromName(name, taken);
+    if (!SERVER_ID_RE.test(id)) return { error: 'Kürzel: 1-24 Zeichen, nur a-z, 0-9 und - (nicht am Anfang/Ende)' };
+    if (RESERVED_SERVER_IDS.has(id)) return { error: `Das Kürzel "${id}" ist reserviert` };
+    if (taken.has(id)) return { error: 'Dieses Kürzel ist schon vergeben' };
+  }
+
+  const host = normalizeHost(b.host !== undefined ? b.host : existing && existing.host);
+  const hp = hostProblem(host);
+  if (hp) return { error: hp };
+  const jp = parsePort(b.javaPort !== undefined ? b.javaPort : existing && existing.javaPort);
+  if (jp.error) return { error: `Java-${jp.error}` };
+  const bp = parsePort(b.bedrockPort !== undefined ? b.bedrockPort : existing && existing.bedrockPort);
+  if (bp.error) return { error: `Bedrock-${bp.error}` };
+  if (!jp.value && !bp.value) return { error: 'Mindestens einen Port eintragen (Java und/oder Bedrock)' };
+  // Gleicher Server zweimal -> derselbe Account wuerde sich selbst rauswerfen ("anderswo eingeloggt")
+  const same = others.find((o) => o.host && o.host.toLowerCase() === host &&
+    ((jp.value && o.javaPort === jp.value) || (bp.value && o.bedrockPort === bp.value)));
+  if (same) return { error: `Diese Adresse mit diesem Port ist schon als "${same.name}" eingetragen` };
+
+  return {
+    value: {
+      id,
+      name,
+      host,
+      javaPort: jp.value,
+      bedrockPort: bp.value,
+      autoChatTemplate: existing ? existing.autoChatTemplate : cleanTemplate(b.autoChatTemplate),
+    },
+  };
+}
+
+function loadServerFile() {
+  const empty = { defaultTemplate: [], servers: [] };
+  for (const file of [SERVERS_FILE, SERVERS_BACKUP_FILE]) {
+    if (!fs.existsSync(file)) continue;
+    try {
+      const raw = JSON.parse(fs.readFileSync(file, 'utf8'));
+      if (!raw || typeof raw !== 'object' || !Array.isArray(raw.servers)) continue;
+      if (file === SERVERS_BACKUP_FILE) console.warn('[Server] servers.json nicht lesbar - Sicherung wird verwendet!');
+      const list = [];
+      const others = [{ id: DEFAULT_SERVER_ID, name: DASHBOARD_TITLE, host: MC_SERVER_HOST.toLowerCase(), javaPort: MC_SERVER_PORT, bedrockPort: MC_BEDROCK_PORT }];
+      for (const entry of raw.servers) {
+        if (!entry || typeof entry !== 'object') continue;
+        const r = validateServerInput({ ...entry, id: entry && entry.id }, { others: [...others, ...list] });
+        if (r.error) {
+          console.warn(`[Server] Eintrag in servers.json übersprungen (${r.error}):`, JSON.stringify(entry).slice(0, 200));
+          continue;
+        }
+        if (r.value.id !== cleanText(entry.id).toLowerCase()) {
+          console.warn(`[Server] Eintrag ohne gültiges Kürzel übersprungen: ${JSON.stringify(entry).slice(0, 200)}`);
+          continue;
+        }
+        list.push(r.value);
+      }
+      return {
+        defaultTemplate: cleanTemplate(raw.defaultServer && raw.defaultServer.autoChatTemplate),
+        servers: list.slice(0, MAX_EXTRA_SERVERS),
+      };
+    } catch (e) {
+      console.error(`[Server] Fehler beim Laden von ${path.basename(file)}:`, e.message);
+    }
+  }
+  return empty;
+}
+
+function saveServers() {
+  const data = JSON.stringify({
+    version: 1,
+    defaultServer: { autoChatTemplate: defaultServer.autoChatTemplate || [] },
+    servers: servers.filter((sv) => !sv.isDefault).map((sv) => ({
+      id: sv.id,
+      name: sv.name,
+      host: sv.host,
+      javaPort: sv.javaPort,
+      bedrockPort: sv.bedrockPort,
+      autoChatTemplate: sv.autoChatTemplate || [],
+    })),
+  }, null, 2);
+  const tmp = SERVERS_FILE + '.tmp';
+  fs.writeFileSync(tmp, data);
+  fs.renameSync(tmp, SERVERS_FILE);
+  try {
+    fs.writeFileSync(SERVERS_BACKUP_FILE, data);
+  } catch (e) {
+    console.error('[Server] Sicherung servers.backup.json fehlgeschlagen (nicht kritisch):', e.message);
+  }
+}
+
+backupAccountsBeforeMultiServer();
+
 // ---------- Server und Verbindungen ----------
 // Eine Verbindung = ein Account auf einem Server. Alles, was pro Verbindung gilt (Bot, Status,
 // Reconnect, Statistik, everJoined, Auto-Chat ...), haengt am Verbindungs-Schluessel:
@@ -960,7 +1148,10 @@ const defaultServer = {
   bedrockPort: MC_BEDROCK_PORT,
   isDefault: true,
 };
-let servers = [defaultServer];
+// Weitere Server (servers.json) + Auto-Chat-Vorlagen; siehe "Serverliste" weiter unten
+const serverFile = loadServerFile();
+defaultServer.autoChatTemplate = serverFile.defaultTemplate;
+let servers = [defaultServer, ...serverFile.servers];
 // Verbindungen zu weiteren Servern: [{ username, server, everJoined, autoChat, ... }]
 let extraConnections = [];
 
@@ -1006,6 +1197,23 @@ function saveConnSettings(key) {
 function saveExtraConnections() {
   // kommt mit den weiteren Servern (noch keine)
 }
+// Warum kann diese Verbindung gerade nicht starten? (null = alles in Ordnung)
+function connectionTargetProblem(key) {
+  const target = serverOf(key);
+  if (!target) return 'Server gibt es nicht mehr';
+  if (!target.host) return 'Kein Server eingetragen (MC_SERVER_HOST in der .env)';
+  const bedrock = isBedrockAccount(connUser(key));
+  if (bedrock && !target.bedrockPort) return 'Server hat keinen Bedrock-Port';
+  if (!bedrock && !target.javaPort) return 'Server hat keinen Java-Port';
+  return null;
+}
+
+// Auto-Chat-Vorlage eines Servers als Startwert fuer eine neue Verbindung (Kopie)
+function templateFor(serverId) {
+  const sv = getServer(serverId);
+  return sv && Array.isArray(sv.autoChatTemplate) ? sv.autoChatTemplate.map((e) => ({ ...e })) : [];
+}
+
 // Alle Verbindungen eines Accounts, Standardserver zuerst
 function connKeysOfAccount(username) {
   return [username, ...extraConnections.filter((c) => c.username === username).map((c) => connKey(username, c.server))];
@@ -1078,6 +1286,15 @@ function requestBotStart(username, opts = {}) {
   if (bots[username] && bots[username].bot) return; // laeuft schon
   if (bots[username] && bots[username].pendingStart) return; // Bedrock: wartet gerade auf die Transport-Wahl
   if (currentlyProcessing === username) return; // wird gerade schon versucht
+  const targetProblem = connectionTargetProblem(username);
+  if (targetProblem) {
+    console.warn(`[Server] ${username} startet nicht: ${targetProblem}`);
+    if (bots[username] && !bots[username].bot) {
+      bots[username].status = targetProblem;
+      broadcastAccountList();
+    }
+    return;
+  }
   // Wer/was startet? Steht spaeter in der aktualisierten "anderswo eingeloggt"-Meldung
   if (opts.source) startSources[username] = opts.source;
   else delete startSources[username];
@@ -3025,6 +3242,123 @@ function accountNameProblem(name) {
   return null;
 }
 
+// ---------- Serverliste: API ----------
+// Ansehen duerfen alle Angemeldeten (fuer die Anzeige), anlegen/aendern/loeschen nur Owner und Admin.
+function serverDetail(sv) {
+  return `${sv.host || '(keine Adresse)'} · Java ${sv.javaPort || '–'} · Bedrock ${sv.bedrockPort || '–'} · Kürzel ${sv.id}`;
+}
+function serverForClient(sv, viewer) {
+  const out = {
+    id: sv.id,
+    name: sv.name,
+    host: sv.host,
+    javaPort: sv.javaPort,
+    bedrockPort: sv.bedrockPort,
+    isDefault: !!sv.isDefault,
+  };
+  if (viewer && viewer.role !== 'user') {
+    out.autoChatTemplate = sv.autoChatTemplate || [];
+    out.connections = sv.isDefault ? accounts.length : extraConnections.filter((c) => c.server === sv.id).length;
+  }
+  return out;
+}
+function auditServer(req, action, sv, detail) {
+  auditWeb(req, action, `${sv.name} (${sv.id})`, detail);
+}
+
+app.get('/api/servers', (req, res) => {
+  res.json({
+    servers: servers.map((sv) => serverForClient(sv, req.user)),
+    canManage: !!(req.user && req.user.role !== 'user'),
+    limits: { maxServers: MAX_EXTRA_SERVERS, maxTemplate: AUTOCHAT_TEMPLATE_MAX, maxText: AUTOCHAT_TEXT_MAX },
+  });
+});
+
+app.post('/api/servers', requireManageRights, (req, res) => {
+  if (servers.filter((sv) => !sv.isDefault).length >= MAX_EXTRA_SERVERS) {
+    return res.status(400).json({ error: `Höchstens ${MAX_EXTRA_SERVERS} weitere Server` });
+  }
+  const r = validateServerInput(req.body, { others: servers });
+  if (r.error) return res.status(400).json({ error: r.error });
+  servers.push(r.value);
+  saveServers();
+  auditServer(req, 'Server angelegt', r.value, serverDetail(r.value));
+  securityNotice(`🌐 Server **${r.value.name}** (${r.value.host}) wurde im Dashboard von **${req.user.username}** angelegt`, loginClientIp(req), audit.deviceFromUA(req.headers['user-agent']));
+  res.json({ ok: true, server: serverForClient(r.value, req.user) });
+});
+
+app.put('/api/servers/:id', requireManageRights, (req, res) => {
+  const sv = getServer(String(req.params.id));
+  if (!sv) return res.status(404).json({ error: 'Server nicht gefunden' });
+  if (sv.isDefault) {
+    return res.status(400).json({ error: 'Der Standardserver kommt aus der .env (MC_SERVER_HOST, MC_SERVER_PORT, MC_BEDROCK_PORT) und lässt sich hier nicht ändern.' });
+  }
+  const r = validateServerInput(req.body, { others: servers.filter((o) => o !== sv), existing: sv });
+  if (r.error) return res.status(400).json({ error: r.error });
+  // Ports, die bestehende Verbindungen brauchen, duerfen nicht verschwinden
+  const here = extraConnections.filter((c) => c.server === sv.id);
+  if (!r.value.javaPort && here.some((c) => !isBedrockAccount(c.username))) {
+    return res.status(400).json({ error: 'Auf diesem Server gibt es Java-Verbindungen - der Java-Port wird gebraucht' });
+  }
+  if (!r.value.bedrockPort && here.some((c) => isBedrockAccount(c.username))) {
+    return res.status(400).json({ error: 'Auf diesem Server gibt es Bedrock-Verbindungen - der Bedrock-Port wird gebraucht' });
+  }
+  const before = { name: sv.name, detail: serverDetail(sv) };
+  sv.name = r.value.name;
+  sv.host = r.value.host;
+  sv.javaPort = r.value.javaPort;
+  sv.bedrockPort = r.value.bedrockPort;
+  const after = serverDetail(sv);
+  if (before.name === sv.name && before.detail === after) return res.json({ ok: true, server: serverForClient(sv, req.user) });
+  saveServers();
+  broadcastAccountList();
+  auditServer(req, 'Server geändert', sv, `${before.name !== sv.name ? `Name "${before.name}" → "${sv.name}"; ` : ''}${before.detail} → ${after}`);
+  res.json({ ok: true, server: serverForClient(sv, req.user) });
+});
+
+app.delete('/api/servers/:id', requireManageRights, (req, res) => {
+  const sv = getServer(String(req.params.id));
+  if (!sv) return res.status(404).json({ error: 'Server nicht gefunden' });
+  if (sv.isDefault) return res.status(400).json({ error: 'Der Standardserver lässt sich nicht löschen.' });
+  const n = extraConnections.filter((c) => c.server === sv.id).length;
+  if (n > 0) {
+    return res.status(400).json({ error: `Auf diesem Server gibt es noch ${n} Verbindung(en). Bitte zuerst die Verbindungen entfernen.` });
+  }
+  servers = servers.filter((o) => o !== sv);
+  saveServers();
+  auditServer(req, 'Server gelöscht', sv, serverDetail(sv));
+  securityNotice(`🗑️ Server **${sv.name}** (${sv.host}) wurde im Dashboard von **${req.user.username}** gelöscht`, loginClientIp(req), audit.deviceFromUA(req.headers['user-agent']));
+  res.json({ ok: true });
+});
+
+// Auto-Chat-Vorlage: Startwert fuer neue Accounts (Standardserver) bzw. neue Verbindungen
+app.post('/api/servers/:id/autochat', requireManageRights, (req, res) => {
+  const sv = getServer(String(req.params.id));
+  if (!sv) return res.status(404).json({ error: 'Server nicht gefunden' });
+  const r = cleanAutoChatEntry(req.body);
+  if (r.error) return res.status(400).json({ error: r.error });
+  if (!Array.isArray(sv.autoChatTemplate)) sv.autoChatTemplate = [];
+  if (sv.autoChatTemplate.length >= AUTOCHAT_TEMPLATE_MAX) {
+    return res.status(400).json({ error: `Höchstens ${AUTOCHAT_TEMPLATE_MAX} Einträge pro Vorlage` });
+  }
+  sv.autoChatTemplate.push(r.value);
+  saveServers();
+  auditServer(req, 'Auto-Chat-Vorlage ergänzt', sv, `"${r.value.text}" nach ${r.value.delaySeconds}s`);
+  res.json({ ok: true, autoChatTemplate: sv.autoChatTemplate });
+});
+
+app.delete('/api/servers/:id/autochat/:index', requireManageRights, (req, res) => {
+  const sv = getServer(String(req.params.id));
+  if (!sv) return res.status(404).json({ error: 'Server nicht gefunden' });
+  const list = Array.isArray(sv.autoChatTemplate) ? sv.autoChatTemplate : [];
+  const idx = /^\d+$/.test(String(req.params.index)) ? parseInt(req.params.index, 10) : -1;
+  if (idx < 0 || idx >= list.length) return res.status(400).json({ error: 'Ungültiger Eintrag' });
+  const removed = list.splice(idx, 1)[0];
+  saveServers();
+  auditServer(req, 'Auto-Chat-Vorlage: Eintrag entfernt', sv, `"${removed.text}"`);
+  res.json({ ok: true, autoChatTemplate: list });
+});
+
 app.post('/api/accounts', requireManageRights, (req, res) => {
   const { username: rawUsername } = req.body || {};
   const nameProblem = accountNameProblem(rawUsername);
@@ -3043,6 +3377,7 @@ app.post('/api/accounts', requireManageRights, (req, res) => {
     preferredChatSource: isFirstAccount,
     authCacheId: username,
     notifyElsewhere: false, // Glocke bei neuen Accounts aus - im Dashboard einschaltbar
+    autoChat: templateFor(DEFAULT_SERVER_ID),
   });
   if (isFirstAccount) currentChatSourceUsername = username;
   saveAccounts();
@@ -3784,6 +4119,7 @@ if (DISCORD_BOT_TOKEN && DISCORD_CHANNEL_ID) {
         preferredChatSource: isFirstAccount,
         authCacheId: newUsername,
         notifyElsewhere: false, // Glocke bei neuen Accounts aus - im Dashboard einschaltbar
+        autoChat: templateFor(DEFAULT_SERVER_ID),
       });
       if (isFirstAccount) currentChatSourceUsername = newUsername;
       saveAccounts();
@@ -4015,11 +4351,15 @@ process.on('exit', (code) => console.log(`[Diagnose] Prozess beendet (Code ${cod
 
 server.listen(PORT, () => {
   console.log(`AFK-Manager laeuft auf Port ${PORT}`);
-  console.log(`Zielserver: ${MC_SERVER_HOST}:${MC_SERVER_PORT}`);
+  if (MC_SERVER_HOST) console.log(`Zielserver: ${MC_SERVER_HOST}:${MC_SERVER_PORT}`);
+  else console.error('[Server] MC_SERVER_HOST fehlt in der .env - ohne Standardserver startet kein Account! Bitte eintragen und neu starten.');
+  if (servers.length > 1) console.log(`Weitere Server: ${servers.filter((sv) => !sv.isDefault).map((sv) => `${sv.name} (${sv.host})`).join(', ')}`);
 
   sendDiscordEmbed({
     title: '🟢 AFK-Manager gestartet',
-    description: `Verbindet mit ${MC_SERVER_HOST}, ${accounts.length} Account(s) werden automatisch gestartet.`,
+    description: MC_SERVER_HOST
+      ? `Verbindet mit ${MC_SERVER_HOST}, ${accounts.length} Account(s) werden automatisch gestartet.`
+      : 'MC_SERVER_HOST fehlt in der .env - es startet kein Account.',
     color: DISCORD_COLOR_OK,
   });
 

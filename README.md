@@ -116,6 +116,7 @@ Eigene Ergänzungen, die nur bei dir laufen sollen, kannst du als `.js`-Datei in
 
 - Format der Chat-Spiegelung in Discord (Rang-Tags, Shop- und Tipp-Nachrichten). Auf anderen
   Servern kommt der Chat trotzdem an, nur evtl. weniger schön formatiert.
-- `MC_SERVER_HOST` ist ohne Eintrag `clashsmp.de`.
+- In der `.env.example` ist `clashsmp.de` als Standardserver eingetragen. Ohne `MC_SERVER_HOST`
+  in der `.env` startet kein Account (der Manager sagt dann im Log und im Dashboard Bescheid).
 
 Ausführliche Anleitung: [ANLEITUNG.txt](ANLEITUNG.txt)

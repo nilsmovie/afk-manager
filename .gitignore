@@ -10,8 +10,13 @@
 # Daten des laufenden Managers (Accounts, Dashboard-Benutzer mit Passwort-Hashes)
 accounts.json
 accounts.backup.json
+accounts.vor-mehrserver.json
 users.json
 users.backup.json
+servers.json
+servers.backup.json
+verbindungen.json
+verbindungen.backup.json
 
 # Protokoll (wer hat was gemacht, mit IP-Adressen)
 audit.log
