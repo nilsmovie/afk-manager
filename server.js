@@ -458,7 +458,8 @@ function requireAdmin(req, res, next) {
 function canAccessAccount(user, mcUsername) {
   if (!user) return false;
   if (user.role !== 'user') return true; // Owner/Admin duerfen alles
-  return user.allowedAccounts.includes(mcUsername);
+  // Rechte gelten pro Account - fuer alle seine Verbindungen (alpha und alpha@lobby)
+  return user.allowedAccounts.includes(connUser(String(mcUsername || '')));
 }
 
 // Middleware-Fabrik: prueft canAccessAccount fuer req.params.username
@@ -945,6 +946,13 @@ function deleteBedrockCacheFiles(username) {
 
 let accounts = loadAccounts(); // [{ username, authType: 'premium', everJoined: bool, preferredChatSource: bool }]
 
+// ---------- Mehrere Server: Schalter (.env) ----------
+// Java-Accounts auf weiteren Servern: Standard AN (ohne weitere Server merkt man davon nichts)
+const MULTI_SERVER_JAVA = !/^(0|false|nein|no|aus|off)$/i.test(String(process.env.MULTI_SERVER_JAVA || '').trim());
+// Bedrock-Accounts auf weiteren Servern: Standard AUS (mehr Last, erst testen), plus Obergrenze
+const MULTI_SERVER_BEDROCK = /^(1|true|ja|yes|an|on)$/i.test(String(process.env.MULTI_SERVER_BEDROCK || '').trim());
+const MULTI_SERVER_BEDROCK_MAX = Math.max(0, Math.min(50, parseInt(process.env.MULTI_SERVER_BEDROCK_MAX || '2', 10) || 0));
+
 // ---------- Serverliste (servers.json) ----------
 // Der Standardserver steht NICHT in der Datei, er kommt immer aus der .env. In servers.json
 // stehen nur die weiteren Server und die Auto-Chat-Vorlagen. Aeltere Versionen kennen die
@@ -1153,7 +1161,11 @@ const serverFile = loadServerFile();
 defaultServer.autoChatTemplate = serverFile.defaultTemplate;
 let servers = [defaultServer, ...serverFile.servers];
 // Verbindungen zu weiteren Servern: [{ username, server, everJoined, autoChat, ... }]
-let extraConnections = [];
+// (verbindungen.json - aeltere Versionen kennen die Datei nicht und ignorieren sie)
+const CONNECTIONS_FILE = path.join(__dirname, 'verbindungen.json');
+const CONNECTIONS_BACKUP_FILE = path.join(__dirname, 'verbindungen.backup.json');
+let invalidConnections = []; // Eintraege, die gerade nicht passen (bleiben in der Datei erhalten)
+let extraConnections = loadExtraConnections();
 
 function connKey(username, serverId) {
   return !serverId || serverId === DEFAULT_SERVER_ID ? username : `${username}@${serverId}`;
@@ -1194,8 +1206,72 @@ function saveConnSettings(key) {
   if (isDefaultConn(key)) saveAccounts();
   else saveExtraConnections();
 }
+function cleanConnEntry(e) {
+  if (!e || typeof e !== 'object') return { error: 'kein Eintrag' };
+  const username = typeof e.username === 'string' ? e.username : '';
+  const server = typeof e.server === 'string' ? e.server : '';
+  if (!accounts.some((a) => a.username === username)) return { error: `Account "${username}" gibt es nicht` };
+  const sv = getServer(server);
+  if (!sv || sv.isDefault) return { error: `Server "${server}" gibt es nicht` };
+  return {
+    value: {
+      username,
+      server,
+      everJoined: e.everJoined === true,
+      preferredChatSource: e.preferredChatSource === true,
+      autoChat: Array.isArray(e.autoChat) ? e.autoChat.map(cleanAutoChatEntry).filter((r) => r.value).map((r) => r.value) : [],
+      notifyElsewhere: e.notifyElsewhere !== false,
+      elsewhereNotice: e.elsewhereNotice && e.elsewhereNotice.channelId && e.elsewhereNotice.messageId
+        ? { channelId: String(e.elsewhereNotice.channelId), messageId: String(e.elsewhereNotice.messageId) }
+        : undefined,
+    },
+  };
+}
+
+function loadExtraConnections() {
+  for (const file of [CONNECTIONS_FILE, CONNECTIONS_BACKUP_FILE]) {
+    if (!fs.existsSync(file)) continue;
+    try {
+      const raw = JSON.parse(fs.readFileSync(file, 'utf8'));
+      if (!raw || typeof raw !== 'object' || !Array.isArray(raw.connections)) continue;
+      if (file === CONNECTIONS_BACKUP_FILE) console.warn('[Server] verbindungen.json nicht lesbar - Sicherung wird verwendet!');
+      const list = [];
+      invalidConnections = [];
+      for (const entry of raw.connections) {
+        const r = cleanConnEntry(entry);
+        const dup = r.value && list.some((c) => c.username === r.value.username && c.server === r.value.server);
+        if (r.error || dup) {
+          console.warn(`[Server] Verbindung wird nicht benutzt (${r.error || 'doppelt'}): ${JSON.stringify(entry).slice(0, 200)}`);
+          if (!dup) invalidConnections.push(entry);
+          continue;
+        }
+        list.push(r.value);
+      }
+      return list;
+    } catch (e) {
+      console.error(`[Server] Fehler beim Laden von ${path.basename(file)}:`, e.message);
+    }
+  }
+  return [];
+}
+
 function saveExtraConnections() {
-  // kommt mit den weiteren Servern (noch keine)
+  const data = JSON.stringify({ version: 1, connections: [...extraConnections, ...invalidConnections] }, null, 2);
+  const tmp = CONNECTIONS_FILE + '.tmp';
+  fs.writeFileSync(tmp, data);
+  fs.renameSync(tmp, CONNECTIONS_FILE);
+  try {
+    fs.writeFileSync(CONNECTIONS_BACKUP_FILE, data);
+  } catch (e) {
+    console.error('[Server] Sicherung verbindungen.backup.json fehlgeschlagen (nicht kritisch):', e.message);
+  }
+}
+
+// Anzeigename einer Verbindung fuer Meldungen: "alpha" bzw. "alpha (Lobby)"
+function connLabel(key) {
+  if (isDefaultConn(key)) return key;
+  const sv = serverOf(key);
+  return `${connUser(key)} (${sv ? sv.name : connServerId(key)})`;
 }
 // Warum kann diese Verbindung gerade nicht starten? (null = alles in Ordnung)
 function connectionTargetProblem(key) {
@@ -1205,6 +1281,8 @@ function connectionTargetProblem(key) {
   const bedrock = isBedrockAccount(connUser(key));
   if (bedrock && !target.bedrockPort) return 'Server hat keinen Bedrock-Port';
   if (!bedrock && !target.javaPort) return 'Server hat keinen Java-Port';
+  if (!target.isDefault && !bedrock && !MULTI_SERVER_JAVA) return 'Java auf weiteren Servern ist ausgeschaltet (MULTI_SERVER_JAVA in der .env)';
+  if (!target.isDefault && bedrock && !MULTI_SERVER_BEDROCK) return 'Bedrock auf weiteren Servern ist ausgeschaltet (MULTI_SERVER_BEDROCK in der .env)';
   return null;
 }
 
@@ -1218,6 +1296,11 @@ function templateFor(serverId) {
 function connKeysOfAccount(username) {
   return [username, ...extraConnections.filter((c) => c.username === username).map((c) => connKey(username, c.server))];
 }
+// Ist irgendeine Verbindung dieses Accounts gerade verbunden (oder mitten im Verbinden)?
+function accountConnected(username) {
+  return connKeysOfAccount(username).some((k) => bots[k] && (bots[k].bot || bots[k].pendingStart));
+}
+
 // Alle Verbindungen in der Reihenfolge der Account-Liste (oben nach unten)
 function allConnKeys() {
   return accounts.flatMap((a) => connKeysOfAccount(a.username));
@@ -1271,18 +1354,49 @@ const SEQUENTIAL_WATCHDOG_MS = 45 * 1000; // Sicherheitsnetz, falls mal weder lo
 // drueckt), statt endlos weiter neue Codes zu schicken.
 const MSA_MAX_CODES = 4;
 const MSA_CODE_GRACE_MS = parseInt(process.env.MSA_CODE_GRACE_MS || '30000', 10); // Puffer nach Ablauf eines Codes
-const msaCodeCount = {};      // username -> Anzahl gezeigter Codes seit dem letzten Login/Start
+// Der Microsoft-Login gehoert dem ACCOUNT (alle seine Verbindungen teilen sich den Login-Cache):
+// Zaehler und Pause gelten deshalb pro Account, die Discord-Nachricht pro Verbindung.
+// Waehrend eine Verbindung auf die Code-Eingabe wartet, warten die anderen Verbindungen
+// desselben Accounts in der Warteschlange - nie zwei Logins fuer denselben Cache gleichzeitig.
+const msaCodeCount = {};      // Account -> Anzahl gezeigter Codes seit dem letzten Login/Start
 const msaPaused = new Set();  // Accounts, deren Login wegen unbenutzter Codes pausiert ist
-const msaCodeMessages = {};   // username -> { msg, label }: Discord-Nachricht mit dem aktuellen Code
+const msaCodeMessages = {};   // Verbindung -> { msg, label }: Discord-Nachricht mit dem aktuellen Code
+
+// Wartet gerade eine ANDERE Verbindung desselben Accounts auf die Code-Eingabe?
+function loginBusySibling(key) {
+  for (const k of connKeysOfAccount(connUser(key))) {
+    if (k === key) continue;
+    const st = bots[k];
+    if (st && st.bot && st.msaTimer) return k;
+  }
+  return null;
+}
+// Andere Verbindungen desselben Accounts, die in der Warteschlange warten, wieder anstossen
+function wakeLoginSiblings(key) {
+  const waiting = connKeysOfAccount(connUser(key)).some((k) => k !== key && pendingReconnectSet.has(k));
+  if (waiting) setTimeout(() => advanceSequentialQueue(), SEQUENTIAL_STEP_DELAY_MS);
+}
 
 // opts.manual: jemand hat auf Start gedrueckt (Webseite, Discord) - auch waehrend einer Bedrock-Pause
 // opts.probe:  der eine Probe-Versuch am Ende einer Bedrock-Pause
 function requestBotStart(username, opts = {}) {
-  // Wer einen pausierten Login (zu viele unbenutzte Codes) wieder startet, faengt neu an zu zaehlen
-  if (msaPaused.has(username)) {
-    msaPaused.delete(username);
-    msaCodeCount[username] = 0;
+  // Wer einen pausierten Login (zu viele unbenutzte Codes) wieder startet, faengt neu an zu zaehlen.
+  // Automatische Starts (z.B. einer anderen Verbindung desselben Accounts) heben die Pause nicht auf.
+  const msaAccount = connUser(username);
+  if (msaPaused.has(msaAccount)) {
+    if (opts.manual || isDefaultConn(username) && connKeysOfAccount(msaAccount).length === 1) {
+      msaPaused.delete(msaAccount);
+      msaCodeCount[msaAccount] = 0;
+    } else {
+      if (bots[username] && !bots[username].bot) {
+        bots[username].status = 'Login nötig – Start drücken';
+        bots[username].msaSkipped = true;
+        broadcastAccountList();
+      }
+      return;
+    }
   }
+  if (bots[username]) bots[username].msaSkipped = false;
   if (bots[username] && bots[username].bot) return; // laeuft schon
   if (bots[username] && bots[username].pendingStart) return; // Bedrock: wartet gerade auf die Transport-Wahl
   if (currentlyProcessing === username) return; // wird gerade schon versucht
@@ -1346,11 +1460,35 @@ function advanceSequentialQueue() {
 
   // IMMER von oben nach unten durch die echte Account-Liste gehen und den ersten warteneden
   // Account nehmen - so ist die Reihenfolge garantiert, egal wann wer eingereiht wurde.
-  const nextKey = allConnKeys().find((k) => pendingReconnectSet.has(k));
-  if (!nextKey) {
-    pendingReconnectSet.clear(); // Karteileichen (z.B. geloeschte Accounts) aufraeumen
-    return;
+  const keys = allConnKeys();
+  for (const k of pendingReconnectSet) {
+    if (!keys.includes(k)) pendingReconnectSet.delete(k); // Karteileichen (z.B. geloeschte Accounts)
   }
+  let nextKey = null;
+  for (const k of keys) {
+    if (!pendingReconnectSet.has(k)) continue;
+    if (msaPaused.has(connUser(k))) {
+      // Login dieses Accounts ist pausiert (zu viele unbenutzte Codes) -> nicht anklopfen
+      pendingReconnectSet.delete(k);
+      if (bots[k] && !bots[k].bot) {
+        bots[k].status = 'Login nötig – Start drücken';
+        bots[k].msaSkipped = true;
+        broadcastAccountList();
+      }
+      continue;
+    }
+    const busy = loginBusySibling(k);
+    if (busy) {
+      if (bots[k] && !bots[k].bot && !/^Wartet auf den Microsoft-Login/.test(bots[k].status)) {
+        bots[k].status = `Wartet auf den Microsoft-Login (${connLabel(busy)})`;
+        broadcastAccountList();
+      }
+      continue;
+    }
+    nextKey = k;
+    break;
+  }
+  if (!nextKey) return;
 
   const username = nextKey;
   pendingReconnectSet.delete(username);
@@ -1427,10 +1565,11 @@ function handleMsaCode(username, attempt, data, label) {
     console.log(`[${username}] Microsoft-Code ${data.user_code} aus einem alten Login-Versuch verworfen`);
     return;
   }
-  msaCodeCount[username] = (msaCodeCount[username] || 0) + 1;
+  const msaAccount = connUser(username);
+  msaCodeCount[msaAccount] = (msaCodeCount[msaAccount] || 0) + 1;
   const lifetimeSec = Number(data.expires_in) > 0 ? Number(data.expires_in) : 900;
   const expiresAt = Date.now() + lifetimeSec * 1000;
-  console.log(`[${username}] Microsoft-Login noetig: ${data.user_code} auf ${msaDirectLink(data)} (Code ${msaCodeCount[username]}/${MSA_MAX_CODES}, gueltig ${Math.round(lifetimeSec / 60)} Min.)`);
+  console.log(`[${username}] Microsoft-Login noetig: ${data.user_code} auf ${msaDirectLink(data)} (Code ${msaCodeCount[msaAccount]}/${MSA_MAX_CODES}, gueltig ${Math.round(lifetimeSec / 60)} Min.)`);
 
   state.status = 'Login nötig (Code eingeben)';
   broadcastAccountList();
@@ -1468,10 +1607,12 @@ function msaCodeExpired(username, ref) {
   state.msaTimer = null;
   io.emit('msa-code-clear', { username });
   forceKillBot(username);
-  if ((msaCodeCount[username] || 0) >= MSA_MAX_CODES) {
-    msaPaused.add(username);
+  if ((msaCodeCount[connUser(username)] || 0) >= MSA_MAX_CODES) {
+    msaPaused.add(connUser(username));
     state.status = 'Login nötig – Start drücken';
+    state.msaSkipped = true;
     broadcastAccountList();
+    wakeLoginSiblings(username); // wartende Verbindungen desselben Accounts sehen jetzt die Pause
     logChat(username, `--- ${MSA_MAX_CODES} Login-Codes nicht eingegeben, Login pausiert (zum Fortsetzen auf Start druecken) ---`);
     updateMsaCodeMessage(username, 'paused');
     return;
@@ -1487,9 +1628,15 @@ function msaLoginSucceeded(username) {
     clearTimeout(state.msaTimer);
     state.msaTimer = null;
   }
-  if (msaCodeCount[username] > 0) updateMsaCodeMessage(username, 'ok');
-  msaCodeCount[username] = 0;
-  msaPaused.delete(username);
+  const msaAccount = connUser(username);
+  if (msaCodeMessages[username]) updateMsaCodeMessage(username, 'ok');
+  msaCodeCount[msaAccount] = 0;
+  msaPaused.delete(msaAccount);
+  // Andere Verbindungen desselben Accounts, die wegen des Logins warten mussten, duerfen jetzt
+  for (const k of connKeysOfAccount(msaAccount)) {
+    if (k !== username && bots[k] && bots[k].msaSkipped && !bots[k].manualStop) requestBotStart(k);
+  }
+  wakeLoginSiblings(username);
 }
 
 // Discord-Nachrichten zu Login-Codes pro Account strikt nacheinander abarbeiten - sonst kann
@@ -1526,7 +1673,7 @@ function msaLoginButtonRow(link) {
 async function announceMsaCode(username, label, data, expiresAt) {
   await updateMsaCodeMessageNow(username, 'replaced');
   const unix = Math.floor(expiresAt / 1000);
-  const n = msaCodeCount[username] || 1;
+  const n = msaCodeCount[connUser(username)] || 1;
   const link = msaDirectLink(data);
   const msg = await discordSend('notify', {
     embeds: [{
@@ -1852,10 +1999,10 @@ function extractReadableKickReason(raw) {
 // Accounts gleichzeitig gekickt. Statt dafuer eine einzelne Nachricht pro Account zu
 // schicken, werden Kicks kurz gesammelt: kommen mehrere im selben Zeitfenster,
 // gibt's nur EINE gemeinsame Nachricht.
-let kickBatch = [];
-let kickBatchTimer = null;
+// Pro Server gesammelt: ein Neustart von Server A soll nicht mit Kicks auf Server B vermischt werden
+const kickBatches = {}; // serverId -> { list: [{ username, readableReason }], timer }
 const KICK_BATCH_WINDOW_MS = 6000; // etwas grosszuegiger, falls Kicks leicht gestaffelt reinkommen
-let lastMassKickAt = 0; // wird bei jedem Kick aktualisiert, um "Alle offline" nicht doppelt zu senden
+const lastMassKickAt = {}; // serverId -> Zeitpunkt; damit "Alle offline" nicht doppelt kommt
 
 // Verhindert Dauerspam, wenn EIN Account (z.B. der vorderste in der Warteschlange bei
 // einer laengeren Wartung) alle 60s erneut versucht und dabei immer wieder gekickt wird.
@@ -1863,24 +2010,30 @@ const kickNotifyThrottle = {}; // username -> Zeitpunkt der letzten Einzelmeldun
 const KICK_NOTIFY_THROTTLE_MS = 5 * 60 * 1000; // 5 Minuten
 
 function queueKickNotification(username, readableReason) {
-  lastMassKickAt = Date.now();
-  kickBatch.push({ username, readableReason });
-  if (kickBatchTimer) clearTimeout(kickBatchTimer);
-  kickBatchTimer = setTimeout(flushKickBatch, KICK_BATCH_WINDOW_MS);
+  const sid = connServerId(username);
+  lastMassKickAt[sid] = Date.now();
+  const b = kickBatches[sid] || (kickBatches[sid] = { list: [], timer: null });
+  b.list.push({ username, readableReason });
+  if (b.timer) clearTimeout(b.timer);
+  b.timer = setTimeout(() => flushKickBatch(sid), KICK_BATCH_WINDOW_MS);
 }
 
-function flushKickBatch() {
-  kickBatchTimer = null;
-  const batch = kickBatch;
-  kickBatch = [];
+function flushKickBatch(sid) {
+  const b = kickBatches[sid];
+  if (!b) return;
+  b.timer = null;
+  const batch = b.list;
+  b.list = [];
   if (batch.length === 0) return;
+  const sv = getServer(sid);
+  const where = sid === DEFAULT_SERVER_ID || !sv ? '' : ` (${sv.name})`;
 
   if (batch.length > 1) {
     // Mehrere gleichzeitig -> eine gemeinsame Nachricht statt Einzelspam
     const reason = batch[0].readableReason;
-    const usernames = batch.map((b) => b.username).join(', ');
+    const usernames = batch.map((x) => connUser(x.username)).join(', ');
     sendDiscordEmbed({
-      title: `⚠️ ${batch.length} Accounts wurden gekickt`,
+      title: `⚠️ ${batch.length} Accounts wurden gekickt${where}`,
       description: `${reason.length > 300 ? reason.slice(0, 300) + '...' : reason}\n\nBetroffen: ${usernames}`,
       color: DISCORD_COLOR_DANGER,
     });
@@ -1895,7 +2048,7 @@ function flushKickBatch() {
     }
     kickNotifyThrottle[username] = now;
     sendDiscordEmbed({
-      title: `⚠️ ${username} wurde gekickt`,
+      title: `⚠️ ${connLabel(username)} wurde gekickt`,
       description: readableReason.length > 300 ? readableReason.slice(0, 300) + '...' : readableReason,
       color: DISCORD_COLOR_DANGER,
     });
@@ -2125,6 +2278,20 @@ function accountListForClient(viewerUser) {
     isPrimary: acc.username === effectivePrimary,
     autoChat: acc.autoChat || [],
     notifyElsewhere: acc.notifyElsewhere !== false,
+    // Weitere Server dieses Accounts (der Standardserver ist der Eintrag selbst)
+    connections: extraConnections.filter((c) => c.username === acc.username).map((c) => {
+      const key = connKey(c.username, c.server);
+      const sv = getServer(c.server);
+      return {
+        key,
+        server: c.server,
+        serverName: sv ? sv.name : c.server,
+        status: bots[key] ? bots[key].status : 'gestoppt',
+        uptimeMs: getUptimeMs(key),
+        autoChat: c.autoChat || [],
+        notifyElsewhere: c.notifyElsewhere !== false,
+      };
+    }),
   }));
 }
 
@@ -2146,7 +2313,7 @@ function broadcastAccountList() {
   const online = fullList.filter((a) => a.status === 'online').length;
   if (lastOnlineCountForDiscord !== null && total > 0) {
     if (online === 0 && lastOnlineCountForDiscord > 0) {
-      const causedByRecentKicks = Date.now() - lastMassKickAt < KICK_BATCH_WINDOW_MS + 2000;
+      const causedByRecentKicks = Date.now() - (lastMassKickAt[DEFAULT_SERVER_ID] || 0) < KICK_BATCH_WINDOW_MS + 2000;
       if (!causedByRecentKicks) {
         sendDiscordEmbed({
           title: '🔴 Alle Accounts offline',
@@ -2225,7 +2392,7 @@ function startBot(username) {
     // weiterhin ganz normal verarbeitet.
     hideErrors: true,
     // Die Bibliothek liefert snake_case Felder (user_code, verification_uri, expires_in)
-    onMsaCode: (data) => handleMsaCode(username, attempt, data, username),
+    onMsaCode: (data) => handleMsaCode(username, attempt, data, connLabel(username)),
   };
 
   if (reconnectTimers[username]) {
@@ -2351,7 +2518,7 @@ function startBot(username) {
         // Ueber den Bot mit Start-Knopf (ohne Bot automatisch per Webhook, dann ohne Knopf)
         notifyDiscordChannelWithStartButton(
           username,
-          `🔐 **${username}** ist anderswo eingeloggt. Kein Auto-Reconnect – klick unten, wenn du fertig gespielt hast:`
+          `🔐 **${connLabel(username)}** ist anderswo eingeloggt. Kein Auto-Reconnect – klick unten, wenn du fertig gespielt hast:`
         ).then((sent) => rememberElsewhereNotice(username, sent)).catch(() => {});
       }
     } else {
@@ -2865,7 +3032,7 @@ function connectBedrockClient(username, acc, route) {
     connectTimeout: 30000,
   };
   // Xbox-Auth per Device-Code (gleicher Ablauf wie Java - Link + Code)
-  const onMsaCode = (data) => handleMsaCode(username, attempt, data, `${username} (Bedrock)`);
+  const onMsaCode = (data) => handleMsaCode(username, attempt, data, `${connLabel(username)} (Bedrock)`);
   const attachOptions = {
     host: target.host,
     port: target.bedrockPort,
@@ -3189,9 +3356,17 @@ function stopBot(username) {
   bedrockPause.waiting.delete(username);
   bedrockProbeEnded(username);
   shortSessionCount[username] = 0;
-  // Ein offener Login-Code wird nicht mehr gebraucht
-  msaCodeCount[username] = 0;
-  msaPaused.delete(username);
+  // Ein offener Login-Code wird nicht mehr gebraucht. Zaehler/Pause gehoeren dem Account -
+  // zurueckgesetzt wird nur, wenn keine andere Verbindung desselben Accounts noch dabei ist.
+  const msaAccount = connUser(username);
+  const hadCode = !!(bots[username] && bots[username].msaTimer);
+  const siblingsBusy = connKeysOfAccount(msaAccount).some((k) => k !== username &&
+    (pendingReconnectSet.has(k) || currentlyProcessing === k || (bots[k] && bots[k].bot && bots[k].status !== 'online')));
+  if (!siblingsBusy) {
+    msaCodeCount[msaAccount] = 0;
+    msaPaused.delete(msaAccount);
+  }
+  if (bots[username]) bots[username].msaSkipped = false;
   updateMsaCodeMessage(username, 'stopped');
   io.emit('msa-code-clear', { username });
   if (currentlyProcessing === username) {
@@ -3213,9 +3388,11 @@ function stopBot(username) {
   // forceKillBot versucht sauber zu trennen UND setzt state.bot in JEDEM Fall auf null,
   // damit der Account nie als "laeuft noch" haengen bleibt (auch wenn der Bot selbst
   // z.B. mitten in einem haengenden Microsoft-Login steckt und quit()/end() nichts bewirkt).
+  if (state.msaTimer) { clearTimeout(state.msaTimer); state.msaTimer = null; }
   forceKillBot(username);
   state.status = 'gestoppt';
   broadcastAccountList();
+  if (hadCode) wakeLoginSiblings(username);
 }
 
 // ---------- REST-API ----------
@@ -3271,6 +3448,7 @@ app.get('/api/servers', (req, res) => {
     servers: servers.map((sv) => serverForClient(sv, req.user)),
     canManage: !!(req.user && req.user.role !== 'user'),
     limits: { maxServers: MAX_EXTRA_SERVERS, maxTemplate: AUTOCHAT_TEMPLATE_MAX, maxText: AUTOCHAT_TEXT_MAX },
+    multiServer: { java: MULTI_SERVER_JAVA, bedrock: MULTI_SERVER_BEDROCK, bedrockMax: MULTI_SERVER_BEDROCK_MAX },
   });
 });
 
@@ -3499,27 +3677,27 @@ app.post('/api/accounts/:username/make-primary', requireManageRights, (req, res)
 });
 
 app.post('/api/accounts/:username/notify-elsewhere', requireManageRights, (req, res) => {
-  const acc = accounts.find((a) => a.username === req.params.username);
+  const acc = connectionExists(req.params.username) ? connSettings(req.params.username) : null;
   if (!acc) return res.status(404).json({ error: 'Account nicht gefunden' });
   const { enabled } = req.body || {};
   if (typeof enabled !== 'boolean') {
     return res.status(400).json({ error: 'enabled muss true oder false sein' });
   }
   acc.notifyElsewhere = enabled;
-  saveAccounts();
+  saveConnSettings(req.params.username);
   broadcastAccountList();
-  auditWeb(req, 'Glocke "anderswo eingeloggt"', acc.username, enabled ? 'an' : 'aus');
+  auditWeb(req, 'Glocke "anderswo eingeloggt"', req.params.username, enabled ? 'an' : 'aus');
   res.json({ ok: true, notifyElsewhere: acc.notifyElsewhere });
 });
 
 app.get('/api/accounts/:username/autochat', requireManageRights, (req, res) => {
-  const acc = accounts.find((a) => a.username === req.params.username);
+  const acc = connectionExists(req.params.username) ? connSettings(req.params.username) : null;
   if (!acc) return res.status(404).json({ error: 'Account nicht gefunden' });
   res.json({ autoChat: acc.autoChat || [] });
 });
 
 app.post('/api/accounts/:username/autochat', requireManageRights, (req, res) => {
-  const acc = accounts.find((a) => a.username === req.params.username);
+  const acc = connectionExists(req.params.username) ? connSettings(req.params.username) : null;
   if (!acc) return res.status(404).json({ error: 'Account nicht gefunden' });
   const { text, delaySeconds } = req.body || {};
   if (!text || typeof text !== 'string' || !text.trim()) {
@@ -3530,23 +3708,115 @@ app.post('/api/accounts/:username/autochat', requireManageRights, (req, res) => 
     return res.status(400).json({ error: 'delaySeconds muss eine positive Zahl sein' });
   }
   if (!Array.isArray(acc.autoChat)) acc.autoChat = [];
+  if (!isDefaultConn(req.params.username) && text.trim().length > AUTOCHAT_TEXT_MAX) {
+    return res.status(400).json({ error: `Text zu lang (max. ${AUTOCHAT_TEXT_MAX} Zeichen)` });
+  }
   acc.autoChat.push({ text: text.trim(), delaySeconds: delay });
-  saveAccounts();
-  auditWeb(req, 'Auto-Chat hinzugefügt', acc.username, `"${text.trim()}" nach ${delay}s`);
+  saveConnSettings(req.params.username);
+  auditWeb(req, 'Auto-Chat hinzugefügt', req.params.username, `"${text.trim()}" nach ${delay}s`);
   res.json({ ok: true, autoChat: acc.autoChat });
 });
 
 app.delete('/api/accounts/:username/autochat/:index', requireManageRights, (req, res) => {
-  const acc = accounts.find((a) => a.username === req.params.username);
+  const acc = connectionExists(req.params.username) ? connSettings(req.params.username) : null;
   if (!acc) return res.status(404).json({ error: 'Account nicht gefunden' });
   const idx = parseInt(req.params.index, 10);
   if (isNaN(idx) || !acc.autoChat || idx < 0 || idx >= acc.autoChat.length) {
     return res.status(400).json({ error: 'Ungueltiger Index' });
   }
   const removed = acc.autoChat.splice(idx, 1)[0];
-  saveAccounts();
-  auditWeb(req, 'Auto-Chat entfernt', acc.username, removed ? `"${removed.text}"` : '');
+  saveConnSettings(req.params.username);
+  auditWeb(req, 'Auto-Chat entfernt', req.params.username, removed ? `"${removed.text}"` : '');
   res.json({ ok: true, autoChat: acc.autoChat });
+});
+
+// ---------- Verbindungen zu weiteren Servern (nur Owner/Admin) ----------
+// Warum kann dieser Account (noch) nicht auf diesen Server? (null = geht)
+function addConnectionProblem(username, serverId) {
+  const acc = accounts.find((a) => a.username === username);
+  if (!acc) return { status: 404, error: 'Account nicht gefunden' };
+  const sv = typeof serverId === 'string' ? getServer(serverId) : null;
+  if (!sv) return { status: 404, error: 'Server nicht gefunden' };
+  if (sv.isDefault) return { status: 400, error: 'Auf dem Standardserver ist jeder Account sowieso' };
+  if (extraConnections.some((c) => c.username === username && c.server === sv.id)) {
+    return { status: 400, error: 'Der Account ist schon auf diesem Server' };
+  }
+  const bedrock = isBedrockAccount(username);
+  if (bedrock && !sv.bedrockPort) return { status: 400, error: 'Dieser Server hat keinen Bedrock-Port' };
+  if (!bedrock && !sv.javaPort) return { status: 400, error: 'Dieser Server hat keinen Java-Port' };
+  if (!bedrock && !MULTI_SERVER_JAVA) {
+    return { status: 400, error: 'Java auf weiteren Servern ist ausgeschaltet (MULTI_SERVER_JAVA in der .env)' };
+  }
+  if (bedrock && !MULTI_SERVER_BEDROCK) {
+    return { status: 400, error: 'Bedrock auf weiteren Servern ist ausgeschaltet (MULTI_SERVER_BEDROCK=1 in der .env, siehe Anleitung)' };
+  }
+  if (bedrock && extraConnections.filter((c) => isBedrockAccount(c.username)).length >= MULTI_SERVER_BEDROCK_MAX) {
+    return { status: 400, error: `Höchstens ${MULTI_SERVER_BEDROCK_MAX} Bedrock-Verbindungen zu weiteren Servern (MULTI_SERVER_BEDROCK_MAX)` };
+  }
+  return null;
+}
+
+// Neue Verbindung anlegen (Startwerte: Vorlage des Servers, Glocke wie beim Account)
+function addConnection(username, serverId) {
+  const acc = accounts.find((a) => a.username === username);
+  const entry = {
+    username,
+    server: serverId,
+    everJoined: false, // erster Join auf DIESEM Server: noch kein Auto-Chat
+    preferredChatSource: false,
+    autoChat: templateFor(serverId),
+    notifyElsewhere: acc ? acc.notifyElsewhere !== false : false,
+  };
+  extraConnections.push(entry);
+  saveExtraConnections();
+  const key = connKey(username, serverId);
+  if (!bots[key]) {
+    bots[key] = { bot: null, status: 'gestoppt', hideTimer: null, autoChatTimers: [], manualStop: true, hasSpawnedThisConnection: false };
+  }
+  return key;
+}
+
+// Verbindung entfernen: stoppen, Zustaende und Eintrag loeschen
+function removeConnection(username, serverId) {
+  const key = connKey(username, serverId);
+  stopBot(key);
+  extraConnections = extraConnections.filter((c) => !(c.username === username && c.server === serverId));
+  saveExtraConnections();
+  delete accountStats[key];
+  delete bots[key];
+  delete reconnectFailCount[key];
+  delete shortSessionCount[key];
+  delete kickNotifyThrottle[key];
+  delete startSources[key];
+  return key;
+}
+
+app.post('/api/accounts/:username/connections', requireManageRights, (req, res) => {
+  const { username } = req.params;
+  const serverId = req.body && typeof req.body.server === 'string' ? req.body.server.trim() : '';
+  const problem = addConnectionProblem(username, serverId);
+  if (problem) return res.status(problem.status).json({ error: problem.error });
+  const key = addConnection(username, serverId);
+  const sv = getServer(serverId);
+  auditWeb(req, 'Verbindung angelegt', key, `${sv.name} (${sv.host})`);
+  const start = !(req.body && req.body.start === false);
+  if (start) {
+    requestBotStart(key, { manual: true, source: `über das Dashboard (${req.user ? req.user.username : '?'})` });
+  }
+  broadcastAccountList();
+  res.json({ ok: true, key, started: start });
+});
+
+app.delete('/api/accounts/:username/connections/:server', requireManageRights, (req, res) => {
+  const { username, server } = req.params;
+  if (!extraConnections.some((c) => c.username === username && c.server === server)) {
+    return res.status(404).json({ error: 'Verbindung nicht gefunden' });
+  }
+  const key = removeConnection(username, server);
+  const sv = getServer(server);
+  auditWeb(req, 'Verbindung entfernt', key, sv ? `${sv.name} (${sv.host})` : '');
+  broadcastAccountList();
+  res.json({ ok: true });
 });
 
 app.post('/api/accounts/:username/rename', requireManageRights, (req, res) => {
@@ -3566,8 +3836,8 @@ app.post('/api/accounts/:username/rename', requireManageRights, (req, res) => {
   if (accounts.some((a) => a.username.toLowerCase() === trimmedNew.toLowerCase() && a.username !== username)) {
     return res.status(400).json({ error: 'Ein Account mit diesem Namen existiert schon' });
   }
-  if (bots[username] && bots[username].bot) {
-    return res.status(400).json({ error: 'Bitte den Account zuerst stoppen, bevor er umbenannt wird' });
+  if (accountConnected(username)) {
+    return res.status(400).json({ error: 'Bitte den Account zuerst stoppen (auf allen Servern), bevor er umbenannt wird' });
   }
 
   renameAccount(username, trimmedNew);
@@ -3841,17 +4111,17 @@ app.post('/api/start-all', (req, res) => {
   // Ueber die Warteschlange starten lassen, statt alle gleichzeitig - verhindert
   // gleichzeitige Microsoft-Logins und damit 429-Fehler. Fuer eingeschraenkte
   // User-Rollen wird automatisch nur auf ihre erlaubten Accounts begrenzt.
-  accounts
-    .filter((acc) => canAccessAccount(req.user, acc.username))
-    .forEach((acc) => requestBotStart(acc.username, { manual: true, source: `über „Alle starten“ im Dashboard (${req.user ? req.user.username : '?'})` }));
+  allConnKeys()
+    .filter((key) => canAccessAccount(req.user, key))
+    .forEach((key) => requestBotStart(key, { manual: true, source: `über „Alle starten“ im Dashboard (${req.user ? req.user.username : '?'})` }));
   auditWeb(req, 'Alle gestartet');
   res.json({ ok: true });
 });
 
 app.post('/api/stop-all', (req, res) => {
-  accounts
-    .filter((acc) => canAccessAccount(req.user, acc.username))
-    .forEach((acc) => stopBot(acc.username));
+  allConnKeys()
+    .filter((key) => canAccessAccount(req.user, key))
+    .forEach((key) => stopBot(key));
   auditWeb(req, 'Alle gestoppt');
   res.json({ ok: true });
 });
@@ -4063,8 +4333,8 @@ if (DISCORD_BOT_TOKEN && DISCORD_CHANNEL_ID) {
         message.reply(`❌ Ein Account namens "${newName}" existiert schon.`).catch(() => {});
         return;
       }
-      if (bots[matchedAccount.username] && bots[matchedAccount.username].bot) {
-        message.reply(`❌ Bitte "${matchedAccount.username}" zuerst stoppen (\`!stop ${matchedAccount.username}\`), bevor er umbenannt werden kann.`).catch(() => {});
+      if (accountConnected(matchedAccount.username)) {
+        message.reply(`❌ Bitte "${matchedAccount.username}" zuerst stoppen (\`!stop ${matchedAccount.username}\`${connKeysOfAccount(matchedAccount.username).length > 1 ? ' – auf allen Servern' : ''}), bevor er umbenannt werden kann.`).catch(() => {});
         return;
       }
       const renameProblem = accountNameProblem(newName);

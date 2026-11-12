@@ -119,7 +119,7 @@ class FakeJavaBot extends EventEmitter {
   attack () { this.steuerung.push(['attack']) }
 
   // ---- vom Test gesteuert ----
-  einloggen () { this.emit('login'); this.emit('spawn') }
+  einloggen () { this.drin = true; this.emit('login'); this.emit('spawn') }
   spawn () { this.emit('spawn') }
   kick (grund) { this.emit('kicked', grund, true); this.beendet = true; this.emit('end', 'kicked') }
   trennen () { this.beendet = true; this.emit('end', 'socketClosed') }
@@ -153,7 +153,7 @@ class FakeBedrockClient extends EventEmitter {
   }
 
   // ---- vom Test gesteuert ----
-  spawn () { this.emit('spawn') }
+  spawn () { this.drin = true; this.emit('spawn') }
   trennen (grund) { if (grund) this.emit('disconnect', { message: grund }); this.close() }
   schritt (name, info = {}) { if (this.cb.onStep) this.cb.onStep(name, info) }
   aufbauScheitert (code = 9) { this.schritt('webrtc-getrennt', { reason: `connecterror:${code}`, events: [] }); }
@@ -273,6 +273,14 @@ const t = {
   // ---- Minecraft ----
   javaBots,
   bedrockClients,
+  // Jeden neu auftauchenden Bot sofort einloggen lassen, bis fn() stimmt
+  async alleEinloggenBis (fn, ms = 60000) {
+    return t.warteBis(async () => {
+      t.javaBots.filter((b) => !b.drin && !b.beendet).forEach((b) => b.einloggen())
+      t.bedrockClients.filter((c) => !c.drin && !c._closed).forEach((c) => c.spawn())
+      return fn()
+    }, ms)
+  },
   java: (cacheId) => javaBots.filter((b) => b.opts.username === cacheId).pop(),
   javaAlle: (cacheId) => javaBots.filter((b) => b.opts.username === cacheId),
   bedrock: (gamertag) => bedrockClients.filter((c) => c.username === gamertag).pop(),
