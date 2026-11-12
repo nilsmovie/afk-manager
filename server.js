@@ -1283,6 +1283,11 @@ function connectionTargetProblem(key) {
   if (!bedrock && !target.javaPort) return 'Server hat keinen Java-Port';
   if (!target.isDefault && !bedrock && !MULTI_SERVER_JAVA) return 'Java auf weiteren Servern ist ausgeschaltet (MULTI_SERVER_JAVA in der .env)';
   if (!target.isDefault && bedrock && !MULTI_SERVER_BEDROCK) return 'Bedrock auf weiteren Servern ist ausgeschaltet (MULTI_SERVER_BEDROCK in der .env)';
+  if (!target.isDefault && bedrock) {
+    // Obergrenze (falls sie nachtraeglich gesenkt wurde): die obersten in der Liste duerfen
+    const extraBedrock = allConnKeys().filter((k) => !isDefaultConn(k) && isBedrockAccount(connUser(k)));
+    if (extraBedrock.indexOf(key) >= MULTI_SERVER_BEDROCK_MAX) return `Über der Obergrenze für Bedrock auf weiteren Servern (MULTI_SERVER_BEDROCK_MAX=${MULTI_SERVER_BEDROCK_MAX})`;
+  }
   return null;
 }
 
@@ -1313,8 +1318,17 @@ const reconnectFailCount = {}; // Verbindung -> Anzahl aufeinanderfolgender Fehl
 // Bedrock-Schutz gegen Dauer-Neuverbindungen (Erklaerung bei bedrockRetryAfterFailure / im close-Handler)
 const BEDROCK_PAUSE_AFTER_FAILS = Math.max(2, parseInt(process.env.MC_BEDROCK_PAUSE_AFTER_FAILS || '5', 10) || 5);
 const BEDROCK_PAUSE_MS = Math.max(1, parseInt(process.env.MC_BEDROCK_PAUSE_MIN || '15', 10) || 15) * 60 * 1000;
-let bedrockConsecutiveFails = 0; // Fehlschlaege vor dem Spawn, ueber alle Bedrock-Accounts, seit dem letzten Spawn
-const bedrockPause = { until: 0, timer: null, waiting: new Set(), probe: null };
+// Pro Server: ein Server, der gerade keine Bedrock-Verbindungen annimmt, pausiert nur SEINE
+// Bedrock-Accounts. fails = Fehlschlaege vor dem Spawn seit dem letzten Spawn auf diesem Server.
+const bedrockPauses = {}; // serverId -> { until, timer, waiting: Set, probe, fails, unreachableNoticeAt }
+function bpOf(serverId) {
+  const sid = serverId || DEFAULT_SERVER_ID;
+  return bedrockPauses[sid] || (bedrockPauses[sid] = { until: 0, timer: null, waiting: new Set(), probe: null, fails: 0, unreachableNoticeAt: 0 });
+}
+// Pause-Zustand der Verbindung (ueber ihren Server)
+function bpFor(key) {
+  return bpOf(connServerId(key));
+}
 // Verbindungen, die kurz nach dem Spawn wieder abbrechen: ab 3 in Folge laengere Pause
 const SHORT_SESSION_MS = 5 * 60 * 1000;
 const shortSessionCount = {}; // username -> Anzahl Verbindungen hintereinander, die kuerzer als 5 min hielten
@@ -1414,10 +1428,10 @@ function requestBotStart(username, opts = {}) {
   else delete startSources[username];
   if (isBedrockAccount(username)) {
     if (opts.manual) {
-      bedrockPause.waiting.delete(username);
+      bpFor(username).waiting.delete(username);
       if (reconnectTimers[username]) { clearTimeout(reconnectTimers[username]); delete reconnectTimers[username]; }
       if (shortSessionCount[username]) shortSessionCount[username] = 0; // Start-Klick hebt die Kurzverbindungs-Pause auf
-    } else if (!opts.probe && bedrockPauseActive()) {
+    } else if (!opts.probe && bedrockPauseActive(connServerId(username))) {
       parkBedrockAccount(username); // waehrend der Bedrock-Pause nicht anklopfen
       return;
     }
@@ -2764,24 +2778,33 @@ try {
   console.warn('nethernet-http.js fehlt - Bedrock-Accounts verbinden nur ueber RakNet:', e.message);
 }
 const BEDROCK_ROUTE_TTL_MS = 10 * 60 * 1000;
-const bedrockRoute = { value: null, at: 0, pending: null, lastLogged: '' };
+const bedrockRoutes = {}; // serverId -> { value, at, pending, lastLogged }
+function routeOf(serverId) {
+  const sid = serverId || DEFAULT_SERVER_ID;
+  return bedrockRoutes[sid] || (bedrockRoutes[sid] = { value: null, at: 0, pending: null, lastLogged: '' });
+}
+let weriftTuned = null; // Verbindungspruefung von werift wird nur einmal pro Prozess angepasst
 
-function invalidateBedrockRoute() {
-  bedrockRoute.at = 0;
+function invalidateBedrockRoute(serverId) {
+  routeOf(serverId).at = 0;
 }
 
-function resolveBedrockTransport() {
+function resolveBedrockTransport(serverId) {
+  const sv = getServer(serverId || DEFAULT_SERVER_ID) || defaultServer;
+  const host = sv.host;
+  const port = sv.bedrockPort;
+  const bedrockRoute = routeOf(sv.id);
   if (MC_BEDROCK_TRANSPORT === 'raknet' || !nnhttp) return Promise.resolve({ transport: 'raknet' });
   if (bedrockRoute.value && Date.now() - bedrockRoute.at < BEDROCK_ROUTE_TTL_MS) return Promise.resolve(bedrockRoute.value);
   if (bedrockRoute.pending) return bedrockRoute.pending;
   // Im Modus 'auto' zuerst kurz per RakNet anklopfen: bietet der Server RakNet noch an
   // (Geyser "transport: both"), ist das der bewaehrte, schnelle Weg (nativer Code).
   const raknetFirst = MC_BEDROCK_TRANSPORT === 'auto' && bedrockProtocol && typeof bedrockProtocol.ping === 'function'
-    ? bedrockProtocol.ping({ host: MC_SERVER_HOST, port: MC_BEDROCK_PORT, transport: 'raknet', timeout: 1500 })
+    ? bedrockProtocol.ping({ host, port, transport: 'raknet', timeout: 1500 })
       .then(() => ({ transport: 'raknet', viaPing: true }), () => null)
     : Promise.resolve(null);
   bedrockRoute.pending = raknetFirst
-    .then((rak) => rak || nnhttp.probe({ host: MC_SERVER_HOST, port: MC_BEDROCK_PORT })
+    .then((rak) => rak || nnhttp.probe({ host, port })
       .then((p) => ({ transport: 'nethernet', scheme: p.scheme, address: p.address })))
     .catch((err) => (MC_BEDROCK_TRANSPORT === 'nethernet'
       ? { transport: 'nethernet', scheme: null, probeError: err.message }
@@ -2794,8 +2817,10 @@ function resolveBedrockTransport() {
       if (key !== bedrockRoute.lastLogged) {
         bedrockRoute.lastLogged = key;
         if (route.transport === 'nethernet' && !route.probeError) {
-          console.log(`[Bedrock] ${MC_SERVER_HOST}:${MC_BEDROCK_PORT} bietet NetherNet an - Bedrock-Accounts verbinden ueber NetherNet (Anmeldung per ${String(route.scheme).toUpperCase()} an ${route.address})`);
-          const t = nnhttp.tuneWerift();
+          console.log(`[Bedrock] ${host}:${port} bietet NetherNet an - Bedrock-Accounts verbinden ueber NetherNet (Anmeldung per ${String(route.scheme).toUpperCase()} an ${route.address})`);
+          const firstTune = !weriftTuned;
+          const t = weriftTuned || (weriftTuned = nnhttp.tuneWerift());
+          if (firstTune) {
           console.log(`[Bedrock] NetherNet ueber ${MC_BEDROCK_NETHERNET_IPV6 === 'only' ? 'nur IPv6' : MC_BEDROCK_NETHERNET_IPV6 ? 'IPv4 und IPv6' : 'nur IPv4 (MC_BEDROCK_NETHERNET_IPV6=only fuer nur IPv6)'}`);
           const nativ = MC_BEDROCK_NETHERNET_WEBRTC !== 'werift' && nativeWebrtcAvailable();
           console.log(bedrockUsesThreads()
@@ -2806,12 +2831,13 @@ function resolveBedrockTransport() {
           console.log(t.ok
             ? `[Bedrock] NetherNet-Verbindungspruefung tolerant: ${t.responseMs} ms Antwortzeit, Aufgabe nach ${t.consentTimeoutS} s ohne Antwort${t.delayedAck ? ', Empfangsbestaetigung fuer jedes 2. Paket statt jedes einzelne' : ''}`
             : `[Bedrock] NetherNet-Verbindungspruefung konnte nicht angepasst werden: ${t.error}`);
+          }
         } else if (route.transport === 'nethernet') {
           console.log(`[Bedrock] NetherNet ist fest eingestellt, die Server-Abfrage ging aber nicht (${route.probeError})`);
         } else if (route.viaPing) {
-          console.log(`[Bedrock] ${MC_SERVER_HOST}:${MC_BEDROCK_PORT} antwortet ueber RakNet - Bedrock-Accounts verbinden ueber RakNet`);
+          console.log(`[Bedrock] ${host}:${port} antwortet ueber RakNet - Bedrock-Accounts verbinden ueber RakNet`);
         } else {
-          console.log(`[Bedrock] Kein NetherNet (${route.probeError}) - Bedrock-Accounts verbinden ueber RakNet`);
+          console.log(`[Bedrock] ${host}:${port}: kein NetherNet (${route.probeError}) - Bedrock-Accounts verbinden ueber RakNet`);
         }
       }
       return route;
@@ -2823,11 +2849,12 @@ function resolveBedrockTransport() {
 // Kommt keine Verbindung zustande, haengt der Account nicht in "verbinde..." und blockiert
 // auch nicht die Warteschlange: er wird mit wachsender Pause neu eingereiht, die naechsten
 // Accounts sind sofort dran.
-let bedrockUnreachableNoticeAt = 0;
-const BEDROCK_UNREACHABLE_NOTICE_MS = 6 * 60 * 60 * 1000; // hoechstens alle 6 Stunden nach Discord
+const BEDROCK_UNREACHABLE_NOTICE_MS = 6 * 60 * 60 * 1000; // hoechstens alle 6 Stunden nach Discord (pro Server)
 
-function anyBedrockOnline() {
-  return Object.values(bots).some((s) => s && s.isBedrock && s.bot && s.status === 'online');
+// Ist auf diesem Server gerade irgendein Bedrock-Account im Spiel?
+function anyBedrockOnline(serverId) {
+  const sid = serverId || DEFAULT_SERVER_ID;
+  return Object.entries(bots).some(([k, st]) => st && st.isBedrock && st.bot && st.status === 'online' && connServerId(k) === sid);
 }
 
 // Bedrock-Pause: Scheitern mehrere Verbindungsversuche hintereinander und ist KEIN Bedrock-Account
@@ -2836,8 +2863,8 @@ function anyBedrockOnline() {
 // Accounts BEDROCK_PAUSE_MIN Minuten; danach probiert es EIN Account. Klappt es, kommen die anderen
 // nach, sonst wieder Pause. Ein Klick auf Start probiert es trotzdem sofort.
 // (Einstellungen und Zustand stehen oben bei reconnectFailCount)
-function bedrockPauseActive() {
-  return bedrockPause.until > Date.now();
+function bedrockPauseActive(serverId) {
+  return bpOf(serverId).until > Date.now();
 }
 
 function clockTime(ts) {
@@ -2846,6 +2873,8 @@ function clockTime(ts) {
 
 function parkBedrockAccount(username) {
   const state = bots[username];
+  const sid = connServerId(username);
+  const bedrockPause = bpOf(sid);
   bedrockPause.waiting.add(username);
   pendingReconnectSet.delete(username);
   if (reconnectTimers[username]) { clearTimeout(reconnectTimers[username]); delete reconnectTimers[username]; }
@@ -2854,11 +2883,12 @@ function parkBedrockAccount(username) {
     broadcastAccountList();
   }
   if (!bedrockPause.timer) {
-    bedrockPause.timer = setTimeout(endBedrockPause, Math.max(1000, bedrockPause.until - Date.now()));
+    bedrockPause.timer = setTimeout(() => endBedrockPause(sid), Math.max(1000, bedrockPause.until - Date.now()));
   }
 }
 
-function endBedrockPause() {
+function endBedrockPause(serverId) {
+  const bedrockPause = bpOf(serverId);
   bedrockPause.timer = null;
   // Nur EIN Account (der oberste in der Liste) probiert es - die anderen warten auf sein Ergebnis
   const next = allConnKeys().find((k) => bedrockPause.waiting.has(k) && bots[k] && !bots[k].manualStop);
@@ -2872,13 +2902,16 @@ function endBedrockPause() {
 // Ein Bedrock-Account ist ins Spiel gekommen: Pause beenden, alle Wartenden nachholen
 // Der Probe-Account wurde gestoppt oder geloescht, bevor es ein Ergebnis gab: der naechste probiert es
 function bedrockProbeEnded(username) {
+  const sid = connServerId(username);
+  const bedrockPause = bpOf(sid);
   if (bedrockPause.probe !== username) return;
   bedrockPause.probe = null;
-  if (bedrockPause.waiting.size && !bedrockPause.timer) bedrockPause.timer = setTimeout(endBedrockPause, 5000);
+  if (bedrockPause.waiting.size && !bedrockPause.timer) bedrockPause.timer = setTimeout(() => endBedrockPause(sid), 5000);
 }
 
-function bedrockSpawnSucceeded() {
-  bedrockConsecutiveFails = 0;
+function bedrockSpawnSucceeded(serverId) {
+  const bedrockPause = bpOf(serverId);
+  bedrockPause.fails = 0;
   bedrockPause.probe = null;
   const wasPaused = bedrockPause.until > 0 || bedrockPause.waiting.size > 0;
   bedrockPause.until = 0;
@@ -2899,7 +2932,9 @@ function bedrockSpawnSucceeded() {
 function bedrockRetryAfterFailure(username, detail, transport = 'raknet') {
   const state = bots[username];
   if (!state) return;
-  invalidateBedrockRoute(); // beim naechsten Versuch neu fragen, ob/wie der Server Bedrock annimmt
+  const sid = connServerId(username);
+  const bedrockPause = bpOf(sid);
+  invalidateBedrockRoute(sid); // beim naechsten Versuch neu fragen, ob/wie der Server Bedrock annimmt
   if (state.msaTimer) { clearTimeout(state.msaTimer); state.msaTimer = null; }
 
   if (currentlyProcessing === username) {
@@ -2914,25 +2949,27 @@ function bedrockRetryAfterFailure(username, detail, transport = 'raknet') {
   }
 
   reconnectFailCount[username] = (reconnectFailCount[username] || 0) + 1;
-  bedrockConsecutiveFails++;
+  bedrockPause.fails++;
   if (bedrockPause.probe === username) bedrockPause.probe = null;
   const fails = reconnectFailCount[username];
   state.lastFailure = detail;
 
   // Kommt gerade gar kein Bedrock-Account durch -> alle pausieren statt weiter anzuklopfen
-  if (bedrockConsecutiveFails >= BEDROCK_PAUSE_AFTER_FAILS && !anyBedrockOnline()) {
-    const starting = !bedrockPauseActive();
+  if (bedrockPause.fails >= BEDROCK_PAUSE_AFTER_FAILS && !anyBedrockOnline(sid)) {
+    const starting = !bedrockPauseActive(sid);
     if (starting) {
       bedrockPause.until = Date.now() + BEDROCK_PAUSE_MS;
-      console.warn(`[Bedrock] ${bedrockConsecutiveFails} Verbindungsversuche hintereinander gescheitert, kein Bedrock-Account online (zuletzt ${username}: ${detail}) - alle Bedrock-Accounts pausieren bis ${clockTime(bedrockPause.until)}`);
-      // Bedrock-Accounts, die schon in der Warteschlange stehen, warten ebenfalls
+      const sv = getServer(sid);
+      const where = sid === DEFAULT_SERVER_ID || !sv ? '' : ` auf ${sv.name}`;
+      console.warn(`[Bedrock] ${bedrockPause.fails} Verbindungsversuche hintereinander gescheitert, kein Bedrock-Account online${where} (zuletzt ${username}: ${detail}) - alle Bedrock-Accounts${where} pausieren bis ${clockTime(bedrockPause.until)}`);
+      // Bedrock-Accounts dieses Servers, die schon in der Warteschlange stehen, warten ebenfalls
       for (const u of [...pendingReconnectSet]) {
-        if (u !== username && isBedrockAccount(u)) parkBedrockAccount(u);
+        if (u !== username && isBedrockAccount(connUser(u)) && connServerId(u) === sid) parkBedrockAccount(u);
       }
     }
     logChat(username, `--- Bedrock: keine Verbindung (${detail}) - Pause bis ${clockTime(bedrockPause.until)} ---`);
     parkBedrockAccount(username);
-    maybeNotifyBedrockUnreachable(detail, transport);
+    maybeNotifyBedrockUnreachable(sid, detail, transport);
     return;
   }
 
@@ -2948,7 +2985,7 @@ function bedrockRetryAfterFailure(username, detail, transport = 'raknet') {
     delete reconnectTimers[username];
     requestBotStart(username);
   }, delay);
-  if (fails >= 3) maybeNotifyBedrockUnreachable(detail, transport);
+  if (fails >= 3) maybeNotifyBedrockUnreachable(sid, detail, transport);
 }
 
 function bedrockServerUnreachable(username, client, detail, transport = 'raknet') {
@@ -2961,17 +2998,19 @@ function bedrockServerUnreachable(username, client, detail, transport = 'raknet'
   bedrockRetryAfterFailure(username, detail, transport);
 }
 
-function maybeNotifyBedrockUnreachable(detail, transport) {
+function maybeNotifyBedrockUnreachable(serverId, detail, transport) {
   // Kommt KEIN Bedrock-Account durch, liegt es am Server - einmal erklaeren, was zu tun ist.
   // (Sind andere Bedrock-Accounts online, ist es nur dieser eine - dann keine Meldung.)
-  if (!anyBedrockOnline() && Date.now() - bedrockUnreachableNoticeAt > BEDROCK_UNREACHABLE_NOTICE_MS) {
-    bedrockUnreachableNoticeAt = Date.now();
+  const sv = getServer(serverId) || defaultServer;
+  const bp = bpOf(sv.id);
+  if (!anyBedrockOnline(sv.id) && Date.now() - bp.unreachableNoticeAt > BEDROCK_UNREACHABLE_NOTICE_MS) {
+    bp.unreachableNoticeAt = Date.now();
     const via = transport === 'nethernet' ? 'NetherNet' : 'RakNet';
-    console.warn(`[Diagnose] Bedrock: keine Verbindung zu ${MC_SERVER_HOST}:${MC_BEDROCK_PORT} ueber ${via} (${detail}).`);
+    console.warn(`[Diagnose] Bedrock: keine Verbindung zu ${sv.host}:${sv.bedrockPort} ueber ${via} (${detail}).`);
     sendDiscordEmbed({
-      title: '⚠️ Bedrock-Accounts kommen nicht auf den Server',
+      title: `⚠️ Bedrock-Accounts kommen nicht auf den Server${sv.isDefault ? '' : ` (${sv.name})`}`,
       description:
-        `Keine Verbindung zu ${MC_SERVER_HOST}:${MC_BEDROCK_PORT} über **${via}**: ${detail}\n\n` +
+        `Keine Verbindung zu ${sv.host}:${sv.bedrockPort} über **${via}**: ${detail}\n\n` +
         (transport === 'nethernet'
           ? 'Der Server nimmt die Anmeldung per NetherNet an, aber die Verbindung danach (UDP) kommt nicht zustande. ' +
             'Kommen normale Bedrock-Spieler gerade drauf? Wenn ja, bitte melden.'
@@ -3020,7 +3059,7 @@ function startBedrockBot(username) {
   const acc = accountOf(username);
   if (!acc || !serverOf(username) || !connSettings(username)) return;
   if (bots[username] && (bots[username].bot || bots[username].pendingStart)) return;
-  bedrockPause.waiting.delete(username);
+  bpFor(username).waiting.delete(username);
 
   const startToken = {};
   bots[username] = {
@@ -3035,7 +3074,7 @@ function startBedrockBot(username) {
   };
   broadcastAccountList();
 
-  resolveBedrockTransport().then((route) => {
+  resolveBedrockTransport(connServerId(username)).then((route) => {
     const state = bots[username];
     if (!state || state.pendingStart !== startToken) return; // inzwischen gestoppt oder neu gestartet
     state.pendingStart = null;
@@ -3213,7 +3252,7 @@ function connectBedrockClient(username, acc, route) {
     broadcastAccountList();
     logChat(username, `--- eingeloggt (Bedrock, ${useNethernet ? `NetherNet${state.nnFamily ? ` ueber ${state.nnFamily}` : ''}` : 'RakNet'}) ---`);
     reconnectFailCount[username] = 0; // Erfolg -> Backoff-Zaehler zuruecksetzen
-    bedrockSpawnSucceeded(); // eine evtl. laufende Bedrock-Pause ist damit vorbei
+    bedrockSpawnSucceeded(connServerId(username)); // eine evtl. laufende Bedrock-Pause (dieses Servers) ist damit vorbei
     io.emit('msa-code-clear', { username });
     msaLoginSucceeded(username);
 
@@ -3414,7 +3453,7 @@ function stopBot(username) {
   }
   // Falls der Account gerade nur in der Warteschlange wartet oder aktiv dran ist
   pendingReconnectSet.delete(username);
-  bedrockPause.waiting.delete(username);
+  bpFor(username).waiting.delete(username);
   bedrockProbeEnded(username);
   shortSessionCount[username] = 0;
   // Ein offener Login-Code wird nicht mehr gebraucht. Zaehler/Pause gehoeren dem Account -
@@ -3667,11 +3706,12 @@ function moveConnKey(oldKey, newKey) {
       delete map[oldKey];
     }
   }
-  for (const set of [pendingReconnectSet, msaPaused, bedrockPause.waiting]) {
+  const bp = bpFor(oldKey);
+  for (const set of [pendingReconnectSet, msaPaused, bp.waiting]) {
     if (set.has(oldKey)) { set.delete(oldKey); set.add(newKey); }
   }
   if (currentlyProcessing === oldKey) currentlyProcessing = newKey;
-  if (bedrockPause.probe === oldKey) bedrockPause.probe = newKey;
+  if (bp.probe === oldKey) bp.probe = newKey;
   if (currentChatSourceUsername === oldKey) currentChatSourceUsername = newKey;
   chatHistory.forEach((m) => {
     if (m.username === oldKey) m.username = newKey;
