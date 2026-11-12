@@ -1951,7 +1951,7 @@ function startButtonRow(username) {
   return new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId(`start_${username}`)
-      .setLabel(`▶️ ${username} starten`)
+      .setLabel(`▶️ ${connLabel(username)} starten`.slice(0, 80))
       .setStyle(ButtonStyle.Primary)
   );
 }
@@ -2038,7 +2038,8 @@ function flushKickBatch(sid) {
       description: `${reason.length > 300 ? reason.slice(0, 300) + '...' : reason}\n\nBetroffen: ${usernames}`,
       color: DISCORD_COLOR_DANGER,
     });
-    batch.forEach((b) => (kickNotifyThrottle[b.username] = Date.now()));
+    batch.forEach((x) => (kickNotifyThrottle[x.username] = Date.now()));
+    markNotableOutage(sid);
   } else {
     const { username, readableReason } = batch[0];
     const now = Date.now();
@@ -2097,7 +2098,7 @@ function resolveElsewhereNotice(username) {
       const channel = await discordClient.channels.fetch(notice.channelId);
       const msg = await channel.messages.fetch(notice.messageId);
       await msg.edit({
-        content: `${msg.content}\n\n▶️ **${username}** wurde${source ? ` ${source}` : ''} wieder gestartet (${time} Uhr).`,
+        content: `${msg.content}\n\n▶️ **${connLabel(username)}** wurde${source ? ` ${source}` : ''} wieder gestartet (${time} Uhr).`,
         components: [],
         allowedMentions: { parse: [] },
       });
@@ -2320,12 +2321,55 @@ function accountListForClient(viewerUser) {
   }));
 }
 
-let lastOnlineCountForDiscord = null;
+// "Alle offline" / "Alle wieder online" pro Server. Ruhiger als frueher: "wieder online" kommt
+// nur nach einem richtigen Ausfall - nach "Alle offline", nach einem Massen-Kick (Server-Neustart),
+// nach dem Start des Managers oder wenn mindestens ein Account laenger als
+// DISCORD_ALL_ONLINE_AFTER_MIN Minuten (Standard 10) weg war. Ein einzelner Account, der kurz
+// die Verbindung verliert und gleich wieder da ist, loest keine Meldung mehr aus.
+const ALL_ONLINE_AFTER_MS = Math.max(0, parseFloat(process.env.DISCORD_ALL_ONLINE_AFTER_MIN || '10') || 0) * 60 * 1000;
+const onlineState = {}; // serverId -> { last, downSince, notable }
+function markNotableOutage(serverId) {
+  const st = onlineState[serverId];
+  if (st) st.notable = true;
+}
+function checkAllOnlineMessages() {
+  for (const sv of servers) {
+    const keys = allConnKeys().filter((k) => connServerId(k) === sv.id);
+    const total = keys.length;
+    const online = keys.filter((k) => bots[k] && bots[k].status === 'online').length;
+    // Neu: der Start des Managers zaehlt als Ausfall (-> "Alle wieder online", sobald alle da sind)
+    const st = onlineState[sv.id] || (onlineState[sv.id] = { last: null, downSince: null, notable: true });
+    const where = sv.isDefault ? '' : ` (${sv.name})`;
+    if (online < total && st.downSince === null) st.downSince = Date.now();
+    if (st.last !== null && total > 0) {
+      if (online === 0 && st.last > 0) {
+        const causedByRecentKicks = Date.now() - (lastMassKickAt[sv.id] || 0) < KICK_BATCH_WINDOW_MS + 2000;
+        if (!causedByRecentKicks) {
+          sendDiscordEmbed({
+            title: `🔴 Alle Accounts offline${where}`,
+            description: sv.isDefault ? 'Kein Account ist gerade mit dem Server verbunden.' : `Kein Account ist gerade mit ${sv.name} verbunden.`,
+            color: DISCORD_COLOR_DANGER,
+          });
+        }
+        st.notable = true;
+      } else if (online === total && st.last < total) {
+        const longOutage = st.downSince !== null && Date.now() - st.downSince >= ALL_ONLINE_AFTER_MS;
+        if (st.notable || longOutage) {
+          sendDiscordEmbed({
+            title: `🟢 Alle Accounts wieder online${where}`,
+            description: `${online}/${total} Accounts sind verbunden.`,
+            color: DISCORD_COLOR_OK,
+          });
+        }
+        st.notable = false;
+      }
+    }
+    if (online === total) st.downSince = null;
+    st.last = online;
+  }
+}
 
 function broadcastAccountList() {
-  // Ungefilterte Vollliste - fuer die interne Zaehlung (Discord-Online/Offline-Meldungen)
-  const fullList = accountListForClient(null);
-
   // Jeder verbundene Client bekommt seine EIGENE, nach seiner Rolle gefilterte Liste
   for (const socket of io.sockets.sockets.values()) {
     socket.emit('accounts', accountListForClient(socket.user));
@@ -2334,27 +2378,7 @@ function broadcastAccountList() {
   // auch wenn sie fuer eingeschraenkte Nutzer nicht in ihrer eigenen Liste auftaucht.
   io.emit('chat-status', { primary: getPrimaryUsername(), active: isPrimaryRunning(), servers: chatStatusAll() });
 
-  const total = fullList.length;
-  const online = fullList.filter((a) => a.status === 'online').length;
-  if (lastOnlineCountForDiscord !== null && total > 0) {
-    if (online === 0 && lastOnlineCountForDiscord > 0) {
-      const causedByRecentKicks = Date.now() - (lastMassKickAt[DEFAULT_SERVER_ID] || 0) < KICK_BATCH_WINDOW_MS + 2000;
-      if (!causedByRecentKicks) {
-        sendDiscordEmbed({
-          title: '🔴 Alle Accounts offline',
-          description: 'Kein Account ist gerade mit dem Server verbunden.',
-          color: DISCORD_COLOR_DANGER,
-        });
-      }
-    } else if (online === total && lastOnlineCountForDiscord < total) {
-      sendDiscordEmbed({
-        title: '🟢 Alle Accounts wieder online',
-        description: `${online}/${total} Accounts sind verbunden.`,
-        color: DISCORD_COLOR_OK,
-      });
-    }
-  }
-  lastOnlineCountForDiscord = online;
+  checkAllOnlineMessages();
 }
 
 function logChat(username, text) {
@@ -4338,7 +4362,7 @@ if (DISCORD_BOT_TOKEN && DISCORD_CHANNEL_ID) {
         // eine andere Instanz den Klick schon beantwortet hat (die startet ihn dann selbst).
         let otherInstance = false;
         await interaction.update({
-          content: `${interaction.message.content}\n\n▶️ **${username}** wird jetzt gestartet...`,
+          content: `${interaction.message.content}\n\n▶️ **${connLabel(username)}** wird jetzt gestartet...`,
           components: [],
         }).catch((e) => {
           logInteractionProblem(`Start-Button ${username}`, e);
@@ -4355,6 +4379,33 @@ if (DISCORD_BOT_TOKEN && DISCORD_CHANNEL_ID) {
       logInteractionProblem(where, e);
     }
   });
+
+  // "Name", "Name@lobby" (Kuerzel oder Servername), "Name@alle" -> Verbindungen
+  // Rueckgabe: { keys, account, server, all } oder { error }
+  const findServerByText = (text) => {
+    const x = String(text || '').trim().toLowerCase();
+    if (!x) return null;
+    return servers.find((sv) => sv.id === x) || servers.find((sv) => sv.name.toLowerCase() === x) || null;
+  };
+  const resolveTarget = (text) => {
+    const raw = String(text || '').trim();
+    const at = raw.lastIndexOf('@');
+    const namePart = at > 0 ? raw.slice(0, at).trim() : raw;
+    const serverPart = at > 0 ? raw.slice(at + 1).trim() : null;
+    const account = accounts.find((a) => a.username.toLowerCase() === namePart.toLowerCase());
+    if (!account) return { error: `Unbekannter Account "${namePart}".` };
+    if (serverPart === null) return { keys: [account.username], account, server: defaultServer };
+    if (/^(alle|all)$/i.test(serverPart)) return { keys: connKeysOfAccount(account.username), account, all: true };
+    const sv = findServerByText(serverPart);
+    if (!sv) {
+      return { error: `Unbekannter Server "${serverPart}". Server: ${servers.map((x) => `\`${x.id}\``).join(', ')}` };
+    }
+    const key = connKey(account.username, sv.id);
+    if (!connectionExists(key)) return { error: `${account.username} ist nicht auf ${sv.name}.`, account, server: sv };
+    return { keys: [key], account, server: sv };
+  };
+  const accountsHint = () => `Bekannte Accounts: ${accounts.map((a) => a.username).join(', ') || '(keine)'}` +
+    (servers.length > 1 ? `\nWeitere Server: ${servers.filter((sv) => !sv.isDefault).map((sv) => `\`@${sv.id}\``).join(', ')} (z.B. \`Name@${servers[1].id}\`, \`Name@alle\`)` : '');
 
   discordClient.on('messageCreate', async (message) => {
     if (message.author.bot) return;
@@ -4410,16 +4461,29 @@ if (DISCORD_BOT_TOKEN && DISCORD_CHANNEL_ID) {
     const primaryMatch = content.match(/^!(primary|setchatsource)\s+(.+)$/i);
     if (primaryMatch) {
       const target = primaryMatch[2].trim();
-      const matchedAccount = accounts.find(
-        (a) => a.username.toLowerCase() === target.toLowerCase()
-      );
-      if (!matchedAccount) {
+      const resolved = resolveTarget(target);
+      if (resolved.error || resolved.all) {
         message.reply(
-          `❌ Unbekannter Account "${target}". Beispiel: \`!primary Accountname\`\n` +
-          `Bekannte Accounts: ${accounts.map((a) => a.username).join(', ') || '(keine)'}`
+          `❌ ${resolved.error || 'Bitte einen Server angeben, nicht @alle.'} Beispiel: \`!primary Accountname\`\n` + accountsHint()
         ).catch(() => {});
         return;
       }
+      const key = resolved.keys[0];
+      if (!isDefaultConn(key)) {
+        if (isBedrockAccount(connUser(key))) {
+          message.reply('❌ Bedrock-Accounts können keine Chat-Quelle sein.').catch(() => {});
+          return;
+        }
+        extraConnections.forEach((c) => {
+          if (c.server === connServerId(key)) c.preferredChatSource = c.username === connUser(key);
+        });
+        saveExtraConnections();
+        broadcastAccountList();
+        auditDiscord(message.author, message.channel, 'Chat-Quelle festgelegt', key);
+        message.reply(`⭐ ${connLabel(key)} ist jetzt die Chat-Quelle für ${resolved.server.name}.`).catch(() => {});
+        return;
+      }
+      const matchedAccount = resolved.account;
       makeAccountPrimary(matchedAccount.username);
       auditDiscord(message.author, message.channel, 'Chat-Quelle festgelegt', matchedAccount.username);
       message.reply(`⭐ ${matchedAccount.username} ist jetzt die Chat-Quelle.`).catch(() => {});
@@ -4428,6 +4492,32 @@ if (DISCORD_BOT_TOKEN && DISCORD_CHANNEL_ID) {
 
     // ---------- !add Accountname: neuen Account hinzufuegen und starten ----------
     const addMatch = content.match(/^!add\s+(.+)$/i);
+    if (addMatch && addMatch[1].includes('@')) {
+      const raw = addMatch[1].trim();
+      const at = raw.lastIndexOf('@');
+      const name = raw.slice(0, at).trim();
+      const sv = findServerByText(raw.slice(at + 1));
+      const acc = accounts.find((a) => a.username.toLowerCase() === name.toLowerCase());
+      if (!acc) {
+        message.reply(`❌ Den Account "${name}" gibt es noch nicht – zuerst \`!add ${name}\`, dann \`!add ${name}@server\`.`).catch(() => {});
+        return;
+      }
+      if (!sv) {
+        message.reply(`❌ Unbekannter Server. Server: ${servers.map((x) => `\`${x.id}\``).join(', ')}`).catch(() => {});
+        return;
+      }
+      const problem = addConnectionProblem(acc.username, sv.id);
+      if (problem) {
+        message.reply(`❌ ${problem.error}`).catch(() => {});
+        return;
+      }
+      const key = addConnection(acc.username, sv.id);
+      auditDiscord(message.author, message.channel, 'Verbindung angelegt und gestartet', key, `${sv.name} (${sv.host})`);
+      requestBotStart(key, { manual: true, source: `per !add von ${message.author.username}` });
+      broadcastAccountList();
+      message.reply(`✅ **${acc.username}** geht jetzt zusätzlich auf **${sv.name}** und wird gestartet.`).catch(() => {});
+      return;
+    }
     if (addMatch) {
       const newUsername = addMatch[1].trim();
       const addProblem = accountNameProblem(newUsername);
@@ -4466,17 +4556,27 @@ if (DISCORD_BOT_TOKEN && DISCORD_CHANNEL_ID) {
         message.reply('Keine Accounts vorhanden.').catch(() => {});
         return;
       }
-      const lines = accounts.map((acc, i) => {
-        const status = bots[acc.username] ? bots[acc.username].status : 'gestoppt';
-        const emoji = status === 'online' ? '🟢' : status === 'gestoppt' ? '⚪' : '🟡';
-        const primaryTag = i === 0 ? ' *(Chat-Quelle)*' : '';
-        return `${emoji} **${acc.username}**${primaryTag} — ${status}`;
+      const statusOf = (k) => (bots[k] ? bots[k].status : 'gestoppt');
+      const emojiOf = (st) => (st === 'online' ? '🟢' : st === 'gestoppt' ? '⚪' : '🟡');
+      const lines = [];
+      accounts.forEach((acc) => {
+        const status = statusOf(acc.username);
+        const primaryTag = acc.username === getPrimaryUsername() ? ' *(Chat-Quelle)*' : '';
+        lines.push(`${emojiOf(status)} **${acc.username}**${primaryTag} — ${status}`);
+        connKeysOfAccount(acc.username).slice(1).forEach((k) => {
+          const st = statusOf(k);
+          const sv = serverOf(k);
+          lines.push(`　↳ ${emojiOf(st)} ${sv ? sv.name : connServerId(k)} — ${st}`);
+        });
       });
-      const onlineCount = accounts.filter((acc) => bots[acc.username] && bots[acc.username].status === 'online').length;
+      const keys = allConnKeys();
+      const onlineCount = keys.filter((k) => statusOf(k) === 'online').length;
+      let description = lines.join('\n');
+      if (description.length > 4000) description = description.slice(0, 3990) + '\n…';
       message.reply({
         embeds: [{
-          title: `📋 Account-Übersicht (${onlineCount}/${accounts.length} online)`,
-          description: lines.join('\n'),
+          title: `📋 Account-Übersicht (${onlineCount}/${keys.length} online)`,
+          description,
           color: DISCORD_COLOR_INFO,
         }],
       }).catch(() => {});
@@ -4489,34 +4589,36 @@ if (DISCORD_BOT_TOKEN && DISCORD_CHANNEL_ID) {
       const action = startStopMatch[1].toLowerCase();
       const target = startStopMatch[2].trim();
 
-      if (target.toLowerCase() === 'all') {
+      if (target.toLowerCase() === 'all' || target.toLowerCase() === 'alle') {
         if (accounts.length === 0) {
           message.reply('Keine Accounts vorhanden.').catch(() => {});
           return;
         }
-        accounts.forEach((a) => {
-          if (action === 'start') requestBotStart(a.username, { manual: true, source: `per „!start all“ von ${message.author.username}` });
-          else stopBot(a.username);
+        // Alle Accounts auf allen Servern (wie "Alle starten/stoppen" im Dashboard)
+        allConnKeys().forEach((k) => {
+          if (action === 'start') requestBotStart(k, { manual: true, source: `per „!start all“ von ${message.author.username}` });
+          else stopBot(k);
         });
         auditDiscord(message.author, message.channel, action === 'start' ? 'Alle gestartet' : 'Alle gestoppt');
         message.react('✅').catch(() => {});
         return;
       }
 
-      const matchedAccount = accounts.find(
-        (a) => a.username.toLowerCase() === target.toLowerCase()
-      );
-      if (!matchedAccount) {
+      const resolved = resolveTarget(target);
+      if (resolved.error) {
         message.reply(
-          `❌ Unbekannter Account "${target}". Beispiel: \`!${action} Accountname\` oder \`!${action} all\`\n` +
-          `Bekannte Accounts: ${accounts.map((a) => a.username).join(', ') || '(keine)'}`
+          `❌ ${resolved.error} Beispiel: \`!${action} Accountname\`, \`!${action} Accountname@server\` oder \`!${action} all\`\n` + accountsHint()
         ).catch(() => {});
         return;
       }
 
-      if (action === 'start') requestBotStart(matchedAccount.username, { manual: true, source: `per !start von ${message.author.username}` });
-      else stopBot(matchedAccount.username);
-      auditDiscord(message.author, message.channel, action === 'start' ? 'Gestartet' : 'Gestoppt', matchedAccount.username);
+      resolved.keys.forEach((k) => {
+        if (action === 'start') requestBotStart(k, { manual: true, source: `per !start von ${message.author.username}` });
+        else stopBot(k);
+      });
+      auditDiscord(message.author, message.channel, action === 'start' ? 'Gestartet' : 'Gestoppt',
+        resolved.all ? `${resolved.account.username}@alle` : resolved.keys[0],
+        resolved.all ? resolved.keys.join(', ') : '');
       message.react('✅').catch(() => {});
       return;
     }
@@ -4536,19 +4638,17 @@ if (DISCORD_BOT_TOKEN && DISCORD_CHANNEL_ID) {
     // Minecraft wuerde ihn dann als normalen Chat statt als Befehl behandeln.
     const parts = rest.split(/\s+/);
     const maybeAccount = parts[0];
-    const matchedAccount = accounts.find(
-      (a) => a.username.toLowerCase() === maybeAccount.toLowerCase()
-    );
+    const resolved = resolveTarget(maybeAccount);
 
-    if (!matchedAccount) {
+    if (resolved.error || resolved.all) {
       message.reply(
-        `❌ Unbekannter Account "${maybeAccount}". Beispiel: \`${DISCORD_COMMAND_PREFIX} Accountname Hallo Leute\`\n` +
-        `Bekannte Accounts: ${accounts.map((a) => a.username).join(', ') || '(keine)'}`
+        `❌ ${resolved.error || 'Bitte genau einen Server angeben (nicht @alle).'} Beispiel: \`${DISCORD_COMMAND_PREFIX} Accountname Hallo Leute\`` +
+        `${servers.length > 1 ? ` oder \`${DISCORD_COMMAND_PREFIX} Accountname@${servers[1].id} Hallo\`` : ''}\n` + accountsHint()
       ).catch(() => {});
       return;
     }
 
-    const targetUsername = matchedAccount.username;
+    const targetUsername = resolved.keys[0];
     // Alles nach dem Accountnamen, fuehrende Leerzeichen entfernt
     const chatText = rest.slice(maybeAccount.length).trim();
 
@@ -4559,13 +4659,13 @@ if (DISCORD_BOT_TOKEN && DISCORD_CHANNEL_ID) {
 
     const state = bots[targetUsername];
     if (!state || !state.bot) {
-      message.reply(`❌ ${targetUsername} ist gerade nicht online.`).catch(() => {});
+      message.reply(`❌ ${connLabel(targetUsername)} ist gerade nicht online.`).catch(() => {});
       return;
     }
 
     const sent = sendChatMessage(targetUsername, chatText);
     if (!sent.ok) {
-      message.reply(`❌ Konnte nicht über ${targetUsername} senden: ${sent.error}`).catch(() => {});
+      message.reply(`❌ Konnte nicht über ${connLabel(targetUsername)} senden: ${sent.error}`).catch(() => {});
       return;
     }
     logChat(targetUsername, `(von Discord, ${message.author.username}) ${chatText}`);
@@ -4617,9 +4717,17 @@ setInterval(() => {
       // keinen automatischen Reset mehr macht.
       if (accounts.length > 0) {
         const lines = accounts.map((a) => `**${a.username}**: ${formatDurationServer(getUptimeMs(a.username))}`);
+        // Weitere Server jeweils als eigener Abschnitt
+        for (const sv of servers.filter((x) => !x.isDefault)) {
+          const keys = allConnKeys().filter((k) => connServerId(k) === sv.id);
+          if (keys.length === 0) continue;
+          lines.push('', `__${sv.name}__`);
+          keys.forEach((k) => lines.push(`**${connUser(k)}**: ${formatDurationServer(getUptimeMs(k))}`));
+        }
+        const text = lines.join('\n');
         sendDiscordEmbed({
           title: '📊 Tageszusammenfassung',
-          description: lines.join('\n'),
+          description: text.length > 4000 ? text.slice(0, 3990) + '\n…' : text,
           color: DISCORD_COLOR_INFO,
         });
       }
