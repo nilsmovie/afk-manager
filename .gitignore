@@ -31,6 +31,7 @@ erweiterungen/
 
 # Pakete (kommen mit "npm install")
 node_modules/
+node_modules
 
 # Logs, Absturzdateien, Sicherungskopien
 *.log
@@ -45,3 +46,6 @@ core.[0-9]*
 *~
 .DS_Store
 Thumbs.db
+
+# Testlaeufe
+test/.lauf/

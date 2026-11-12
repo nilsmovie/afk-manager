@@ -5,7 +5,8 @@
   "description": "Dashboard, das Minecraft-Accounts (Java und Bedrock) dauerhaft auf einem Server hält – mit Discord-Bot",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "test": "node test/run.js"
   },
   "dependencies": {
     "bedrock-protocol": "^3.61.0",
