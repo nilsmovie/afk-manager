@@ -65,8 +65,22 @@ module.exports = {
 
     // ---------- Im Browser ----------
     await t.api('POST', '/api/users', { username: 'paul', password: 'geheim123', role: 'user', allowedAccounts: ['alpha'] })
-    const { chromium } = require('playwright')
-    const browser = await chromium.launch()
+    // Der Browser-Teil braucht Playwright mit Chromium - fehlt das (z.B. auf dem Server, auf dem
+    // der Manager laeuft), wird er uebersprungen statt als Fehler gezaehlt
+    let chromium
+    try {
+      ({ chromium } = require('playwright'))
+    } catch (_) {
+      console.log('  --    Browser-Test übersprungen (Playwright nicht installiert, nur für Entwickler nötig)')
+      return
+    }
+    let browser
+    try {
+      browser = await chromium.launch()
+    } catch (e) {
+      console.log(`  --    Browser-Test übersprungen (Chromium startet nicht: ${String(e.message).split('\n')[0]})`)
+      return
+    }
     const oeffnen = async (user, pw, breite) => {
       const res = await fetch(`http://127.0.0.1:${process.env.PORT}/api/login`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: user, password: pw }) })
       const [k, v] = (res.headers.get('set-cookie') || '').split(';')[0].split('=')

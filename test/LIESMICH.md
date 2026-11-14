@@ -17,4 +17,7 @@ wählen), damit die Tagesstatistik nicht zufällig um Mitternacht zurückgesetzt
 
 Szenarien 01–12 prüfen das Verhalten mit nur einem Server, 13–21 die Mehrserver-Version
 (Serverliste, Java und Bedrock auf weiteren Servern, Microsoft-Login pro Account, Dashboard im
-Browser, Discord mit `Name@server`). Der Browser-Test (19) braucht Playwright mit Chromium.
+Browser, Discord mit `Name@server`). Der Browser-Teil von Szenario 19 braucht Playwright mit
+Chromium; fehlt das, wird nur dieser Teil übersprungen.
+
+Ohne `npm` im Pfad geht dasselbe mit `node test/run.js` (bzw. `node test/run.js bedrock`).
