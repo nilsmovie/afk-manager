@@ -1,4 +1,5 @@
-// Neustart: Daten bleiben, Autostart in Reihenfolge, offene "anderswo"-Meldung wird aktualisiert
+// Neustart: Daten bleiben, Autostart; ein "anderswo eingeloggter" Account bleibt gestoppt
+// (sonst würfe der Neustart den echten Spieler raus), seine Meldung wird beim Start aktualisiert
 module.exports = {
   name: 'Neustart des AFK-Managers',
   phasen: 2,
@@ -17,13 +18,18 @@ module.exports = {
     }
     // Phase 2: frisch gestartet
     const notice = t.datei('phase1.json')
-    t.chk('Autostart: alpha zuerst', await t.warteBis(() => t.java('alpha'), 20000) && !t.java('bravo'))
-    t.chk('Meldung nach Neustart aktualisiert', await t.warteBis(() => /nach einem Neustart des AFK-Managers wieder gestartet/.test((t.discord.nachrichten().find((m) => m.id === notice.messageId) || {}).content), 10000))
-    t.java('alpha').einloggen()
-    await t.warteBis(() => t.java('bravo'), 20000)
+    const inhalt = () => (t.discord.nachrichten().find((m) => m.id === notice.messageId) || {}).content || ''
+    t.chk('Autostart: bravo startet', await t.warteBis(() => t.java('bravo'), 20000))
+    t.chk('"anderswo eingeloggter" alpha bleibt gestoppt', !t.java('alpha') && (await t.status('alpha')) === 'gestoppt', await t.status('alpha'))
+    t.chk('Im Log vermerkt', t.logEnthaelt(/Auto-Start übersprungen \(war gestoppt.*alpha/))
     t.java('bravo').einloggen()
     await t.warte(3000)
     t.chk('Auto-Chat und everJoined überleben den Neustart', t.java('bravo').gesendet.includes('/hide'), t.java('bravo').gesendet)
+    t.chk('Meldung mit Knopf bleibt, solange alpha aus ist', !/wieder gestartet/.test(inhalt()), inhalt())
+    await t.api('POST', '/api/start/alpha')
+    t.chk('Start: alpha verbindet', await t.warteBis(() => t.java('alpha'), 20000))
+    t.chk('Meldung beim Start aktualisiert', await t.warteBis(() => /über das Dashboard \(nils\) wieder gestartet/.test(inhalt()), 10000), inhalt())
+    t.chk('Merker "gestoppt" ist weg', !t.datei('accounts.json').find((a) => a.username === 'alpha').stopped)
     t.chk('Benutzer bleiben (Login klappt)', await t.login('nils', 'testpw'))
   },
 }

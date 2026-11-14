@@ -15,11 +15,10 @@ module.exports = {
     const conn = async (acc, key, als) => ((await t.liste(als)).find((a) => a.username === acc) || { connections: [] }).connections.find((c) => c.key === key)
 
     if (t.PHASE === 2) {
-      // Neustart: Verbindungen bleiben, starten in Listenreihenfolge, Auto-Chat (schon mal drin) kommt
-      await t.warteBis(() => bot('mc.test', 'alpha'), 30000)
-      t.chk('Neustart: erst der Standardserver', !bot('lobby.test', 'alpha'))
-      bot('mc.test', 'alpha').einloggen()
+      // Neustart: Verbindungen bleiben, Auto-Chat (schon mal drin) kommt. Per "Alle stoppen"
+      // gestoppte bleiben aus - nur alpha2@lobby wurde danach wieder gestartet.
       t.chk('Neustart: alpha2@lobby startet mit', await t.warteBis(() => bot('lobby.test', 'alpha'), 60000))
+      t.chk('Neustart: gestoppter Standardserver-Account bleibt aus', !bot('mc.test', 'alpha') && (await t.status('alpha2')) === 'gestoppt')
       const l = await t.liste()
       t.chk('Neustart: Verbindung in der Liste', l.find((a) => a.username === 'alpha2').connections.length === 1, l)
       bot('lobby.test', 'alpha').einloggen()

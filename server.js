@@ -854,6 +854,8 @@ function loadAccounts() {
         elsewhereNotice: a.elsewhereNotice && a.elsewhereNotice.channelId && a.elsewhereNotice.messageId
           ? { channelId: String(a.elsewhereNotice.channelId), messageId: String(a.elsewhereNotice.messageId) }
           : undefined,
+        // Vom Benutzer gestoppt -> bleibt auch nach einem Neustart des Managers aus, bis jemand startet
+        ...(a.stopped === true ? { stopped: true } : {}),
       }));
       // Falls (z.B. nach einem Update) noch niemand als bevorzugte Chat-Quelle markiert ist,
       // ist das per Definition der erste Account in der Liste.
@@ -1224,6 +1226,7 @@ function cleanConnEntry(e) {
       elsewhereNotice: e.elsewhereNotice && e.elsewhereNotice.channelId && e.elsewhereNotice.messageId
         ? { channelId: String(e.elsewhereNotice.channelId), messageId: String(e.elsewhereNotice.messageId) }
         : undefined,
+      ...(e.stopped === true ? { stopped: true } : {}),
     },
   };
 }
@@ -1301,6 +1304,22 @@ function templateFor(serverId) {
 function connKeysOfAccount(username) {
   return [username, ...extraConnections.filter((c) => c.username === username).map((c) => connKey(username, c.server))];
 }
+// "Vom Benutzer gestoppt" merken bzw. vergessen. Gestoppte Verbindungen bleiben auch nach einem
+// Neustart des Managers aus, bis jemand auf Start drueckt (Dashboard, Discord, Knopf).
+function setUserStopped(key, stopped) {
+  const cs = connectionExists(key) ? connSettings(key) : null;
+  if (!cs) return;
+  if (stopped ? cs.stopped === true : !cs.stopped) return; // schon so
+  if (stopped) cs.stopped = true;
+  else delete cs.stopped;
+  saveConnSettings(key);
+}
+// Vom Benutzer gestoppt: stoppen und merken
+function stopByUser(key) {
+  stopBot(key);
+  setUserStopped(key, true);
+}
+
 // Ist irgendeine Verbindung dieses Accounts gerade verbunden (oder mitten im Verbinden)?
 function accountConnected(username) {
   return connKeysOfAccount(username).some((k) => bots[k] && (bots[k].bot || bots[k].pendingStart));
@@ -1394,6 +1413,7 @@ function wakeLoginSiblings(key) {
 // opts.manual: jemand hat auf Start gedrueckt (Webseite, Discord) - auch waehrend einer Bedrock-Pause
 // opts.probe:  der eine Probe-Versuch am Ende einer Bedrock-Pause
 function requestBotStart(username, opts = {}) {
+  if (opts.manual) setUserStopped(username, false);
   // Wer einen pausierten Login (zu viele unbenutzte Codes) wieder startet, faengt neu an zu zaehlen.
   // Automatische Starts (z.B. einer anderen Verbindung desselben Accounts) heben die Pause nicht auf.
   const msaAccount = connUser(username);
@@ -2596,6 +2616,8 @@ function startBot(username) {
     if (isDuplicateLogin) {
       const state = bots[username];
       if (state) state.manualStop = true;
+      // Auch ein Neustart des Managers startet ihn nicht - sonst flöge der echte Spieler raus
+      setUserStopped(username, true);
       logChat(username, '--- Account scheint anderswo eingeloggt zu sein, kein Auto-Reconnect (bitte manuell auf Start druecken, wenn du fertig bist) ---');
       if (isDefaultConn(username)) temporarilyDemotePrimary(username);
 
@@ -3674,6 +3696,7 @@ app.post('/api/accounts', requireManageRights, (req, res) => {
     authCacheId: username,
     notifyElsewhere: false, // Glocke bei neuen Accounts aus - im Dashboard einschaltbar
     autoChat: templateFor(DEFAULT_SERVER_ID),
+    stopped: true, // im Dashboard angelegt, noch nicht gestartet -> bleibt aus, bis jemand startet
   });
   if (isFirstAccount) currentChatSourceUsername = username;
   saveAccounts();
@@ -3935,6 +3958,8 @@ app.post('/api/accounts/:username/connections', requireManageRights, (req, res) 
   const start = !(req.body && req.body.start === false);
   if (start) {
     requestBotStart(key, { manual: true, source: `über das Dashboard (${req.user ? req.user.username : '?'})` });
+  } else {
+    setUserStopped(key, true);
   }
   broadcastAccountList();
   res.json({ ok: true, key, started: start });
@@ -4254,7 +4279,7 @@ app.post('/api/start-all', (req, res) => {
 app.post('/api/stop-all', (req, res) => {
   allConnKeys()
     .filter((key) => canAccessAccount(req.user, key))
-    .forEach((key) => stopBot(key));
+    .forEach((key) => stopByUser(key));
   auditWeb(req, 'Alle gestoppt');
   res.json({ ok: true });
 });
@@ -4266,7 +4291,7 @@ app.post('/api/start/:username', requireAccountAccess, (req, res) => {
 });
 
 app.post('/api/stop/:username', requireAccountAccess, (req, res) => {
-  stopBot(req.params.username);
+  stopByUser(req.params.username);
   auditWeb(req, 'Gestoppt', req.params.username);
   res.json({ ok: true });
 });
@@ -4651,7 +4676,7 @@ if (DISCORD_BOT_TOKEN && DISCORD_CHANNEL_ID) {
         // Alle Accounts auf allen Servern (wie "Alle starten/stoppen" im Dashboard)
         allConnKeys().forEach((k) => {
           if (action === 'start') requestBotStart(k, { manual: true, source: `per „!start all“ von ${message.author.username}` });
-          else stopBot(k);
+          else stopByUser(k);
         });
         auditDiscord(message.author, message.channel, action === 'start' ? 'Alle gestartet' : 'Alle gestoppt');
         message.react('✅').catch(() => {});
@@ -4668,7 +4693,7 @@ if (DISCORD_BOT_TOKEN && DISCORD_CHANNEL_ID) {
 
       resolved.keys.forEach((k) => {
         if (action === 'start') requestBotStart(k, { manual: true, source: `per !start von ${message.author.username}` });
-        else stopBot(k);
+        else stopByUser(k);
       });
       auditDiscord(message.author, message.channel, action === 'start' ? 'Gestartet' : 'Gestoppt',
         resolved.all ? `${resolved.account.username}@alle` : resolved.keys[0],
@@ -4848,7 +4873,8 @@ server.listen(PORT, () => {
   sendDiscordEmbed({
     title: '🟢 AFK-Manager gestartet',
     description: MC_SERVER_HOST
-      ? `Verbindet mit ${MC_SERVER_HOST}, ${accounts.length} Account(s) werden automatisch gestartet.`
+      ? `Verbindet mit ${MC_SERVER_HOST}, ${allConnKeys().filter((k) => !(connSettings(k) || {}).stopped).length} Account(s) werden automatisch gestartet` +
+        `${allConnKeys().some((k) => (connSettings(k) || {}).stopped) ? `, ${allConnKeys().filter((k) => (connSettings(k) || {}).stopped).length} bleiben gestoppt` : ''}.`
       : 'MC_SERVER_HOST fehlt in der .env - es startet kein Account.',
     color: DISCORD_COLOR_OK,
   });
@@ -4857,6 +4883,13 @@ server.listen(PORT, () => {
   // Laeuft ueber die Reconnect-Warteschlange, damit sie nacheinander statt gleichzeitig
   // einen Microsoft-Login versuchen (verhindert 429-Fehler bei vielen Accounts).
   allConnKeys().forEach((key) => {
+    if ((connSettings(key) || {}).stopped) {
+      console.log(`Auto-Start übersprungen (war gestoppt, startet erst wieder per Start): ${key}`);
+      if (!bots[key]) {
+        bots[key] = { bot: null, status: 'gestoppt', hideTimer: null, autoChatTimers: [], manualStop: true, hasSpawnedThisConnection: false };
+      }
+      return;
+    }
     console.log(`Auto-Start (Serverstart): ${key}`);
     // bots-Objekt vorab anlegen damit der Status auf der Webseite sofort sichtbar ist,
     // auch wenn der Account noch in der Warteschlange auf seinen Verbindungsversuch wartet.

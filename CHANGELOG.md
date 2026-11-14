@@ -42,6 +42,13 @@ Standardserver weiter, ohne Neueinrichtung und ohne neuen Microsoft-Login.
   Spiel, nimmt der Manager es an. Heruntergeladen wird nichts – ein AFK-Bot braucht keine
   Texturen. Nach dem Update ist `npm install` nötig.
 
+- **Gestoppt bleibt gestoppt**: Accounts (und Verbindungen zu weiteren Servern), die vorher
+  gestoppt waren – per Stop, `!stop`, „Alle stoppen“, „anderswo eingeloggt“ oder neu angelegt
+  und noch nicht gestartet –, startet ein Neustart des Managers nicht mehr. Sie bleiben aus, bis
+  jemand auf Start drückt. Gespeichert als `"stopped": true` in `accounts.json` bzw.
+  `verbindungen.json` (ältere Versionen ignorieren das). Beim ersten Neustart nach dem Update
+  starten noch alle, weil es den Merker vorher nicht gab.
+
 ### Geändert
 
 - **„Alle Accounts wieder online“ ist ruhiger**: Die Meldung kommt nur nach einem echten

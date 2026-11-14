@@ -163,8 +163,13 @@ Buttons pro Account:
 Gut zu wissen:
  - Loggst du dich mit einem Account selbst im Spiel ein, fliegt der Bot raus
    ("anderswo eingeloggt"). Er verbindet sich dann bewusst NICHT automatisch
-   neu. Drücke wieder auf Start, wenn du fertig bist.
- - Beim Programmstart werden alle gespeicherten Accounts automatisch gestartet.
+   neu - auch nicht nach einem Neustart des Managers. Drücke wieder auf Start,
+   wenn du fertig bist.
+ - Beim Programmstart werden alle Accounts automatisch gestartet - außer denen,
+   die vorher gestoppt waren (Stop im Dashboard, !stop, "Alle stoppen",
+   "anderswo eingeloggt" oder neu angelegt und noch nie gestartet). Die bleiben
+   gestoppt, bis jemand auf Start drückt (Dashboard, !start, Knopf in Discord,
+   "Alle starten").
  - Bedrock-Accounts bleiben online und können Nachrichten und /Befehle senden:
    im Dashboard-Chat (Auswahl "Name (Bedrock)"), per Discord (!mc) und per
    Auto-Chat. Normaler Chat geht auf jeder Bedrock-Version, /Befehle nur
