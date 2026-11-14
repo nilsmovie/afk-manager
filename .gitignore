@@ -10,8 +10,13 @@
 # Daten des laufenden Managers (Accounts, Dashboard-Benutzer mit Passwort-Hashes)
 accounts.json
 accounts.backup.json
+accounts.vor-mehrserver.json
 users.json
 users.backup.json
+servers.json
+servers.backup.json
+verbindungen.json
+verbindungen.backup.json
 
 # Protokoll (wer hat was gemacht, mit IP-Adressen)
 audit.log
@@ -31,6 +36,7 @@ erweiterungen/
 
 # Pakete (kommen mit "npm install")
 node_modules/
+node_modules
 
 # Logs, Absturzdateien, Sicherungskopien
 *.log
@@ -45,3 +51,6 @@ core.[0-9]*
 *~
 .DS_Store
 Thumbs.db
+
+# Testlaeufe
+test/.lauf/

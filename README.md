@@ -13,9 +13,12 @@ Gebaut für **clashsmp.de**, läuft aber mit jedem Minecraft-Server (Adresse in 
   Server die eigene IP nicht sperrt
 - **Dashboard**: Accounts starten/stoppen, Live-Chat, Befehle senden, Steuerung (Laufen, Klicken,
   Hotbar), Auto-Chat nach dem Einloggen, Uptime pro Tag
+- **Mehrere Server (optional)**: ein Account kann zusätzlich auf weiteren Servern online sein –
+  mit eigenem Status, Auto-Chat, Chat und Statistik pro Server, aber nur einem Microsoft-Login
 - **Benutzer mit Rollen**: Owner, Admin, User (User sehen nur die ihnen zugewiesenen Accounts)
-- **Discord-Bot**: `!start`, `!stop`, `!add`, `!list`, `!mc Account Nachricht`, Login-Codes als
-  Link, Meldungen bei Kick/„anderswo eingeloggt“, Tageszusammenfassung
+- **Discord-Bot**: `!start`, `!stop`, `!add`, `!list`, `!mc Account Nachricht` (weitere Server:
+  `Account@server`), Login-Codes als Link, Meldungen bei Kick/„anderswo eingeloggt“,
+  Tageszusammenfassung
 - **Protokoll** (nur Owner): wer hat wann was gemacht – Webseite mit IP und Gerät, Discord mit
   Name und ID; aktive Anmeldungen ansehen und abmelden
 
@@ -90,7 +93,8 @@ sudo systemctl restart afk-manager
 ```
 
 Ändere die Programmdateien (`server.js`, `admin.html` …) nicht selbst – sonst kann `git pull`
-nicht aktualisieren. Einstellungen gehören in die `.env`.
+nicht aktualisieren. Einstellungen gehören in die `.env`. Was sich geändert hat, steht im
+[CHANGELOG.md](CHANGELOG.md).
 
 Zurück auf eine ältere Version, falls ein Update Probleme macht:
 
@@ -104,8 +108,9 @@ git checkout main          # später wieder auf den neuesten Stand
 ## Was nur auf deinem Rechner bleibt
 
 Diese Dateien entstehen im laufenden Betrieb und kommen **nie** ins Repository (siehe
-`.gitignore`): `.env`, `accounts.json`, `users.json`, `audit.log`, `audit-known-ips.json` und
-deren Sicherungskopien. Die Microsoft-Logins liegen unter `~/.minecraft/nmp-cache`.
+`.gitignore`): `.env`, `accounts.json`, `users.json`, `servers.json`, `verbindungen.json`,
+`audit.log`, `audit-known-ips.json` und deren Sicherungskopien (auch
+`accounts.vor-mehrserver.json`). Die Microsoft-Logins liegen unter `~/.minecraft/nmp-cache`.
 Gib diese Dateien nie weiter – darin stehen Passwort-Hashes, Discord-Token und die Logins deiner
 Accounts.
 
@@ -116,6 +121,13 @@ Eigene Ergänzungen, die nur bei dir laufen sollen, kannst du als `.js`-Datei in
 
 - Format der Chat-Spiegelung in Discord (Rang-Tags, Shop- und Tipp-Nachrichten). Auf anderen
   Servern kommt der Chat trotzdem an, nur evtl. weniger schön formatiert.
-- `MC_SERVER_HOST` ist ohne Eintrag `clashsmp.de`.
+- In der `.env.example` ist `clashsmp.de` als Standardserver eingetragen. Ohne `MC_SERVER_HOST`
+  in der `.env` startet kein Account (der Manager sagt dann im Log und im Dashboard Bescheid).
+
+## Tests
+
+`npm test` spielt alle wichtigen Abläufe (Warteschlange, Kicks, Microsoft-Login, Bedrock-Pause,
+Discord-Befehle, mehrere Server …) mit nachgebauten Bots durch – ohne echten Server und ohne
+Login. Details: [test/LIESMICH.md](test/LIESMICH.md)
 
 Ausführliche Anleitung: [ANLEITUNG.txt](ANLEITUNG.txt)

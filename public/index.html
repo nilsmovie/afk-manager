@@ -603,6 +603,28 @@
   .autochat-text-input { flex: 1; min-width: 120px; }
   .autochat-delay-input { width: 72px; flex-shrink: 0; }
 
+  /* ---------- Weitere Server eines Accounts ---------- */
+  .conn-list { margin-top: 9px; display: flex; flex-direction: column; gap: 6px; }
+  .conn-row {
+    border: 1px solid var(--border-row);
+    border-radius: 10px;
+    padding: 7px 9px 8px;
+    background: color-mix(in srgb, var(--accent) 3%, transparent);
+  }
+  .conn-head { display: flex; align-items: center; gap: 6px; min-width: 0; margin-bottom: 7px; }
+  .conn-server {
+    font-size: 12.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    flex: 0 1 auto; min-width: 0;
+  }
+  .conn-server::before { content: '↳ '; color: var(--text-sub); font-weight: 400; }
+  .conn-head .status { margin-left: auto; flex: 0 50 auto; min-width: 0; white-space: nowrap; }
+  .conn-head .primary-badge { flex-shrink: 0; white-space: nowrap; }
+  .conn-uptime { font-size: 11px; color: var(--text-sub); white-space: nowrap; }
+  .conn-add-area { margin-top: 8px; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+  .conn-add-area select { width: auto; flex: 1 1 150px; margin-bottom: 0; font-size: 12px; padding: 6px 8px; }
+  .conn-add-area .sub { font-size: 11.5px; }
+  #chatServerSelect { width: auto; max-width: 160px; margin-bottom: 0; font-size: 12.5px; padding: 7px 8px; }
+
   .uptime-text {
     font-size: 11px;
     color: var(--text-sub);
@@ -1138,6 +1160,7 @@
       <div class="chat-header-row">
         <h2 style="margin:0;">Chat <span id="chatPrimaryInfo" class="sub"></span></h2>
         <div class="chat-tools">
+          <select id="chatServerSelect" title="Chat von welchem Server?" style="display:none"></select>
           <input id="chatSearch" placeholder="Suche im Verlauf..." />
           <button class="icon-btn ghost" id="exportChatBtn" title="Verlauf exportieren">⬇</button>
         </div>
@@ -1577,6 +1600,145 @@ let primaryUsername = null;
 let chatActive = false;
 const msaBoxes = {}; // username -> DOM element
 
+// ---------- Mehrere Server ----------
+const DEFAULT_SERVER = 'standard';
+let serverList = [];          // aus /api/servers
+let multiServerFlags = { java: true, bedrock: false };
+let chatServer = DEFAULT_SERVER; // von welchem Server der Chat angezeigt wird
+let chatStatusByServer = {};  // { serverId: { primary, active } }
+const chatServerSelect = document.getElementById('chatServerSelect');
+const openConnAddPanels = new Set(); // Accounts, deren "+ Server"-Bereich offen ist
+
+function serverName(id) {
+  const sv = serverList.find((x) => x.id === id);
+  return sv ? sv.name : id;
+}
+// "alpha" bzw. "alpha (Lobby)"
+function keyLabel(key) {
+  const k = String(key || '');
+  const i = k.lastIndexOf('@');
+  return i > 0 ? `${k.slice(0, i)} (${serverName(k.slice(i + 1))})` : k;
+}
+function msgServer(m) { return m.server || DEFAULT_SERVER; }
+// Nur der Accountname eines Schluessels ("alpha@lobby" -> "alpha")
+function accountPart(key) {
+  const k = String(key || '');
+  const i = k.lastIndexOf('@');
+  return i > 0 ? k.slice(0, i) : k;
+}
+
+async function loadServerList() {
+  try {
+    const res = await fetch('/api/servers');
+    if (!res.ok) return;
+    const data = await res.json();
+    serverList = Array.isArray(data.servers) ? data.servers : [];
+    if (data.multiServer) multiServerFlags = data.multiServer;
+  } catch (e) { /* naechster Versuch beim naechsten Ereignis */ }
+  if (lastAccountsList.length) renderAccounts(lastAccountsList);
+  updateChatServerSelect();
+}
+
+function applyChatStatus() {
+  const st = chatStatusByServer[chatServer] || (chatServer === DEFAULT_SERVER ? null : { primary: null, active: false });
+  if (st) {
+    primaryUsername = st.primary;
+    chatActive = st.active;
+  }
+}
+
+// Auswahl "Chat von Server ..." nur, wenn es weitere Server mit Java-Verbindungen gibt
+function updateChatServerSelect() {
+  const ids = Object.keys(chatStatusByServer).filter((id) => id === DEFAULT_SERVER || chatStatusByServer[id].primary);
+  if (ids.length <= 1) {
+    chatServerSelect.style.display = 'none';
+    if (chatServer !== DEFAULT_SERVER) { chatServer = DEFAULT_SERVER; refreshChatPanel(); }
+    return;
+  }
+  if (!ids.includes(chatServer)) { chatServer = DEFAULT_SERVER; refreshChatPanel(); }
+  const want = ids.map((id) => `${id}|${serverName(id)}`).join(',');
+  if (chatServerSelect.dataset.items !== want) {
+    chatServerSelect.innerHTML = '';
+    ids.forEach((id) => {
+      const opt = document.createElement('option');
+      opt.value = id;
+      opt.textContent = serverName(id);
+      chatServerSelect.appendChild(opt);
+    });
+    chatServerSelect.dataset.items = want;
+  }
+  chatServerSelect.value = chatServer;
+  chatServerSelect.style.display = '';
+}
+
+// Chat-Fenster fuer den gewaehlten Server neu aufbauen (Quelle, Sende-Auswahl, Verlauf, Kopf)
+function refreshChatPanel() {
+  applyChatStatus();
+  fillChatAccountSelect();
+  redrawChatLog();
+  if (chatActive) updateChatStatusDisplay();
+}
+
+chatServerSelect.addEventListener('change', () => {
+  chatServer = chatServerSelect.value || DEFAULT_SERVER;
+  refreshChatPanel();
+});
+
+// Sende-Auswahl: alle Accounts/Verbindungen auf dem gerade gezeigten Chat-Server
+function fillChatAccountSelect(previous = chatAccountSelect.value) {
+  chatAccountSelect.innerHTML = '';
+  const items = [];
+  lastAccountsList.forEach((acc) => {
+    const isBedrock = acc.username.startsWith('.');
+    if (chatServer === DEFAULT_SERVER) {
+      items.push([acc.username, isBedrock ? `${acc.username} (Bedrock)` : acc.username]);
+    } else {
+      (acc.connections || []).filter((c) => c.server === chatServer).forEach((c) => {
+        items.push([c.key, isBedrock ? `${acc.username} (Bedrock)` : acc.username]);
+      });
+    }
+  });
+  items.forEach(([value, text]) => {
+    const opt = document.createElement('option');
+    opt.value = value;
+    opt.textContent = text;
+    chatAccountSelect.appendChild(opt);
+  });
+  if (items.some(([v]) => v === previous)) chatAccountSelect.value = previous;
+}
+
+async function addConnection(username) {
+  const sel = document.getElementById('connadd-select-' + username);
+  const server = sel ? sel.value : '';
+  if (!server) return;
+  const res = await fetch('/api/accounts/' + encodeURIComponent(username) + '/connections', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ server }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) { showMessage(data.error || 'Fehler beim Hinzufügen'); return; }
+  openConnAddPanels.delete(username);
+}
+async function removeConnection(username, server) {
+  const confirmed = await showConfirm(`${username} vom Server "${serverName(server)}" entfernen?\nAuf dem Standardserver bleibt der Account.`, {
+    title: 'Server entfernen',
+    okLabel: 'Entfernen',
+    danger: true,
+  });
+  if (!confirmed) return;
+  const res = await fetch('/api/accounts/' + encodeURIComponent(username) + '/connections/' + encodeURIComponent(server), { method: 'DELETE' });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    showMessage(data.error || 'Fehler beim Entfernen');
+  }
+}
+function toggleConnAdd(username) {
+  if (openConnAddPanels.has(username)) openConnAddPanels.delete(username);
+  else openConnAddPanels.add(username);
+  renderAccounts(lastAccountsList);
+}
+
 document.getElementById('addAccountBtn').addEventListener('click', async () => {
   const username = document.getElementById('newUsername').value.trim();
   if (!username) return;
@@ -1873,6 +2035,79 @@ function renderAccounts(accounts) {
     }
     const statusText = escapeHtml(acc.status || '');
 
+    // Weitere Server dieses Accounts (jede Verbindung mit eigenem Status, Start/Stopp, Stern ...)
+    const conns = acc.connections || [];
+    const connHtml = conns.map((c) => {
+      const cOn = c.notifyElsewhere !== false;
+      const cStatus = escapeHtml(c.status || '');
+      let cStar = '';
+      let cNotify = '';
+      if (canManage) {
+        if (c.isPrimary) cStar = `<button class="icon-btn ghost star-active" disabled title="Ist die Chat-Quelle für diesen Server">★</button>`;
+        else if (isBedrock) cStar = `<button class="icon-btn ghost" disabled title="Bedrock-Accounts können keine Chat-Quelle sein">★</button>`;
+        else cStar = `<button class="icon-btn ghost" onclick="makePrimary(${jsArg(c.key)})" title="Als Chat-Quelle für diesen Server festlegen">★</button>`;
+        cNotify = isBedrock
+          ? `<button class="icon-btn ghost" disabled title="Bei Bedrock-Accounts nicht verfügbar">🔔</button>`
+          : `<button class="icon-btn ghost${cOn ? '' : ' notify-off'}" onclick="toggleNotifyElsewhere(${jsArg(c.key)}, ${cOn})" title="${cOn ? 'Discord-Meldung bei &quot;anderswo eingeloggt&quot;: AN' : 'Discord-Meldung bei &quot;anderswo eingeloggt&quot;: AUS'}">${cOn ? '🔔' : '🔕'}</button>`;
+      }
+      const cAuto = (c.autoChat || []).map((a, i) =>
+        `<div class="autochat-item">
+          <span class="text">${escapeHtml(a.text)}</span>
+          <span class="delay-tag">${escapeHtml(a.delaySeconds)}s</span>
+          <button class="icon-btn ghost" onclick="deleteAutoChat(${jsArg(c.key)},${i})" title="Entfernen">✕</button>
+        </div>`
+      ).join('');
+      return `
+        <div class="conn-row">
+          <div class="conn-head">
+            <span class="conn-server" title="${escapeHtml(c.serverName)}">${escapeHtml(c.serverName)}</span>
+            ${c.isPrimary && !isBedrock ? '<span class="primary-badge">Chat-Quelle</span>' : ''}
+            ${(canManage && (c.autoChat || []).length > 0) ? `<span class="primary-badge" style="background:color-mix(in srgb,var(--status-other-dot) 15%,transparent);color:var(--status-other-text);border-color:color-mix(in srgb,var(--status-other-dot) 35%,transparent)">⏱ ${c.autoChat.length}</span>` : ''}
+            <span class="status ${statusClass(c.status)}" title="${cStatus}"><span class="status-text">${cStatus}</span></span>
+          </div>
+          <div class="account-buttons">
+            <div class="btn-group">
+              ${cStar}
+              <button class="small" onclick="startAccount(${jsArg(c.key)})">Start</button>
+              <button class="small stop" onclick="stopAccount(${jsArg(c.key)})">Stop</button>
+              <span class="conn-uptime">${formatDuration(c.uptimeMs)}</span>
+            </div>
+            ${canManage ? `<div class="btn-group">
+              ${cNotify}
+              <button class="icon-btn ghost" onclick="toggleAutoChat(${jsArg(c.key)})" title="Auto-Chat für diesen Server bearbeiten">⚙️</button>
+              <button class="icon-btn ghost" onclick="removeConnection(${jsArg(acc.username)}, ${jsArg(c.server)})" title="Von diesem Server entfernen">✕</button>
+            </div>` : ''}
+          </div>
+          ${canManage ? `<div class="autochat-area" id="autochat-${escapeHtml(c.key)}" style="display:none;">
+            <div class="autochat-list">${cAuto || '<span style="font-size:12px;color:var(--text-sub)">Noch keine Auto-Chat-Aktionen für diesen Server.</span>'}</div>
+            <div class="autochat-add-row">
+              <input class="autochat-text-input" id="autochat-text-${escapeHtml(c.key)}" placeholder='Text oder Befehl, z.B. /afk' />
+              <input class="autochat-delay-input" id="autochat-delay-${escapeHtml(c.key)}" type="number" min="0" placeholder="Sek." />
+              <button class="small" onclick="addAutoChat(${jsArg(c.key)})">+ Hinzufügen</button>
+            </div>
+          </div>` : ''}
+        </div>`;
+    }).join('');
+
+    // "+ Server": nur fuer Owner/Admin und nur, wenn es passende weitere Server gibt
+    const extraServers = serverList.filter((sv) => !sv.isDefault);
+    const freeServers = extraServers.filter((sv) => !conns.some((c) => c.server === sv.id) && (isBedrock ? sv.bedrockPort : sv.javaPort));
+    let connAddHtml = '';
+    if (canManage && extraServers.length > 0) {
+      const typeOff = isBedrock ? !multiServerFlags.bedrock : !multiServerFlags.java;
+      const open = openConnAddPanels.has(acc.username);
+      connAddHtml = `
+        <div class="conn-add-area">
+          <button class="small ghost" onclick="toggleConnAdd(${jsArg(acc.username)})" title="Diesen Account zusätzlich auf einen weiteren Server schicken">${open ? '− Server' : '+ Server'}</button>
+          ${open ? (typeOff
+            ? `<span class="sub">${isBedrock ? 'Bedrock' : 'Java'} auf weiteren Servern ist ausgeschaltet (${isBedrock ? 'MULTI_SERVER_BEDROCK' : 'MULTI_SERVER_JAVA'} in der .env).</span>`
+            : freeServers.length === 0
+              ? `<span class="sub">Kein weiterer passender Server frei.</span>`
+              : `<select id="connadd-select-${escapeHtml(acc.username)}">${freeServers.map((sv) => `<option value="${escapeHtml(sv.id)}">${escapeHtml(sv.name)}</option>`).join('')}</select>
+                 <button class="small" onclick="addConnection(${jsArg(acc.username)})">Hinzufügen und starten</button>`) : ''}
+        </div>`;
+    }
+
     row.innerHTML = `
       <div class="account-name-line">
         <strong title="${escapeHtml(acc.username)}">${escapeHtml(acc.username)}</strong>
@@ -1898,6 +2133,8 @@ function renderAccounts(accounts) {
         <div class="uptime-bar"><div class="uptime-fill" style="width:${uptimePct}%"></div></div>
         <span class="uptime-text">${formatDuration(acc.uptimeMs)} heute</span>
       </div>
+      ${conns.length ? `<div class="conn-list">${connHtml}</div>` : ''}
+      ${connAddHtml}
       ${canManage ? `<div class="autochat-area" id="autochat-${escapeHtml(acc.username)}" style="display:none;">
         <div class="autochat-list">${autoChatHtml || '<span style="font-size:12px;color:var(--text-sub)">Noch keine Auto-Chat-Aktionen.</span>'}</div>
         <div class="autochat-add-row">
@@ -1909,25 +2146,25 @@ function renderAccounts(accounts) {
     `;
     accountListEl.appendChild(row);
 
-    // Chat-Dropdown: ALLE Accounts (Bedrock kann Chat und Befehle senden).
-    // Steuerungs-Dropdown: nur Java-Accounts (Bedrock hat keine Ingame-Steuerung).
-    const opt = document.createElement('option');
-    opt.value = acc.username;
-    opt.textContent = isBedrock ? `${acc.username} (Bedrock)` : acc.username;
-    chatAccountSelect.appendChild(opt);
-
+    // Steuerungs-Dropdown: nur Java-Accounts (Bedrock hat keine Ingame-Steuerung),
+    // weitere Server mit Servernamen dahinter
     if (!isBedrock) {
       const ctrlOpt = document.createElement('option');
       ctrlOpt.value = acc.username;
       ctrlOpt.textContent = acc.username;
       controlAccountSelect.appendChild(ctrlOpt);
+      conns.forEach((c) => {
+        const o = document.createElement('option');
+        o.value = c.key;
+        o.textContent = `${acc.username} (${c.serverName})`;
+        controlAccountSelect.appendChild(o);
+      });
     }
   });
 
-  if (accounts.some((a) => a.username === previousChatSelection)) {
-    chatAccountSelect.value = previousChatSelection;
-  }
-  if (accounts.some((a) => a.username === previousControlSelection)) {
+  // Chat-Dropdown: alle Accounts auf dem gerade gezeigten Chat-Server (Bedrock kann senden)
+  fillChatAccountSelect(previousChatSelection);
+  if (Array.from(controlAccountSelect.options).some((o) => o.value === previousControlSelection)) {
     controlAccountSelect.value = previousControlSelection;
   }
   openAutoChatPanels.forEach((username) => {
@@ -1935,8 +2172,11 @@ function renderAccounts(accounts) {
     if (el) el.style.display = 'block';
   });
 
-  updateStatusStrip(accounts);
-  reactCatToStatus(accounts);
+  // Alle Verbindungen zaehlen (ohne weitere Server = genau wie bisher)
+  const flat = [];
+  accounts.forEach((a) => { flat.push(a); (a.connections || []).forEach((c) => flat.push(c)); });
+  updateStatusStrip(flat);
+  reactCatToStatus(flat);
 }
 
 let lastOnlineCount = null;
@@ -1976,12 +2216,12 @@ function updateStatusStrip(accounts) {
 function updateChatStatusDisplay() {
   if (!primaryUsername) {
     chatPrimaryInfo.textContent = '(kein Account vorhanden)';
-    showChatOff('Noch kein Account hinzugefügt.');
+    showChatOff(chatServer === DEFAULT_SERVER ? 'Noch kein Account hinzugefügt.' : 'Auf diesem Server ist noch kein Java-Account.');
   } else if (!chatActive) {
-    chatPrimaryInfo.textContent = `(${primaryUsername} - offline)`;
-    showChatOff(`Chat ist aus, weil ${primaryUsername} gerade nicht läuft.`);
+    chatPrimaryInfo.textContent = `(${accountPart(primaryUsername)} - offline)`;
+    showChatOff(`Chat ist aus, weil ${keyLabel(primaryUsername)} gerade nicht läuft.`);
   } else {
-    chatPrimaryInfo.textContent = `(${primaryUsername})`;
+    chatPrimaryInfo.textContent = `(${accountPart(primaryUsername)})`;
   }
 }
 
@@ -2006,9 +2246,10 @@ function redrawChatLog() {
   }
 
   const term = chatSearchTerm.trim().toLowerCase();
+  const ofServer = chatHistoryData.filter((m) => msgServer(m) === chatServer);
   const filtered = term
-    ? chatHistoryData.filter((m) => m.text.toLowerCase().includes(term))
-    : chatHistoryData;
+    ? ofServer.filter((m) => m.text.toLowerCase().includes(term))
+    : ofServer;
 
   if (filtered.length === 0) {
     chatlogEl.innerHTML = term
@@ -2025,6 +2266,7 @@ function addChatLine(msg) {
   if (chatHistoryData.length > CHAT_HISTORY_CLIENT_LIMIT) {
     chatHistoryData = chatHistoryData.slice(-CHAT_HISTORY_CLIENT_LIMIT);
   }
+  if (msgServer(msg) !== chatServer || !chatActive) return;
   const term = chatSearchTerm.trim().toLowerCase();
   if (term && !msg.text.toLowerCase().includes(term)) return;
   appendChatLine(msg);
@@ -2045,8 +2287,9 @@ document.getElementById('chatSearch').addEventListener('input', (e) => {
 });
 
 document.getElementById('exportChatBtn').addEventListener('click', () => {
-  if (chatHistoryData.length === 0) return;
-  const lines = chatHistoryData.map((m) => `[${new Date(m.ts).toLocaleString()}] ${m.text}`);
+  const ofServer = chatHistoryData.filter((m) => msgServer(m) === chatServer);
+  if (ofServer.length === 0) return;
+  const lines = ofServer.map((m) => `[${new Date(m.ts).toLocaleString()}] ${m.text}`);
   const blob = new Blob([lines.join('\n')], { type: 'text/plain;charset=utf-8' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -2081,7 +2324,7 @@ function showMsaBox(data) {
     msaBoxes[data.username] = box;
   }
   box.innerHTML = `
-    <div><strong>Microsoft-Login nötig für ${escapeHtml(data.username)}</strong></div>
+    <div><strong>Microsoft-Login nötig für ${escapeHtml(data.label || data.username)}</strong></div>
     <div><a href="${escapeHtml(data.directUri || data.verificationUri)}" target="_blank" rel="noopener"><strong>👉 Hier klicken und anmelden</strong></a> – der Code ist im Link schon eingetragen.</div>
     <div>Falls doch nach einem Code gefragt wird (auf <a href="${escapeHtml(data.verificationUri)}" target="_blank" rel="noopener">${escapeHtml(data.verificationUri)}</a>):</div>
     <div class="msa-code">${escapeHtml(data.userCode)}</div>
@@ -2103,21 +2346,32 @@ socket.on('accounts', (list) => {
   renderAccounts(list);
 });
 
+function takeChatStatus(data) {
+  chatStatusByServer = data.servers || { [DEFAULT_SERVER]: { primary: data.primary, active: data.active } };
+  if (!chatStatusByServer[DEFAULT_SERVER]) chatStatusByServer[DEFAULT_SERVER] = { primary: data.primary, active: data.active };
+  const wasActive = chatActive;
+  applyChatStatus();
+  updateChatServerSelect();
+  return wasActive;
+}
+
 socket.on('chat-status', (data) => {
-  primaryUsername = data.primary;
-  chatActive = data.active;
-  updateChatStatusDisplay();
+  const wasActive = takeChatStatus(data);
+  if (wasActive !== chatActive && chatActive) redrawChatLog();
+  else updateChatStatusDisplay();
 });
 
 socket.on('chat-state', (data) => {
-  primaryUsername = data.primary;
-  chatActive = data.active;
+  takeChatStatus(data);
   renderChatHistory(data.history);
 });
 
 socket.on('chat', (msg) => {
-  if (chatActive) addChatLine(msg);
+  addChatLine(msg);
 });
+
+socket.on('servers-changed', () => loadServerList());
+loadServerList();
 
 socket.on('msa-code', showMsaBox);
 socket.on('msa-code-clear', (data) => removeMsaBox(data.username));
