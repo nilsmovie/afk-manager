@@ -10,11 +10,18 @@ module.exports = {
     await t.warte(30000)
     t.chk('Ohne Login von alpha startet bravo nicht', t.javaBots.length === 1)
 
+    // Zeit auf der Testuhr messen statt fest zu warten - auf einem ausgelasteten Rechner
+    // (z.B. neben dem laufenden Manager) dauern die Abfragen sonst zu lange
+    const loginZeit = t.zeit.jetzt()
     t.java('alpha').einloggen()
     t.chk('alpha ist online', await t.warteBis(async () => (await t.status('alpha')) === 'online', 5000))
-    await t.warte(5000)
-    t.chk('bravo kommt erst nach der Pause von 10 s', !t.java('bravo'))
-    t.chk('Danach startet bravo', await t.warteBis(() => t.java('bravo'), 15000))
+    let bravoZeit = null
+    const bravoKam = await t.warteBis(() => {
+      if (t.java('bravo')) { bravoZeit = t.zeit.jetzt(); return true }
+      return false
+    }, 30000)
+    t.chk('bravo kommt erst nach der Pause von 10 s', bravoKam && bravoZeit - loginZeit >= 9500, bravoZeit && `${Math.round((bravoZeit - loginZeit) / 100) / 10} s`)
+    t.chk('Danach startet bravo', bravoKam)
 
     // bravo scheitert vor dem Login -> nach 60 s nochmal bravo, charlie wartet
     t.java('bravo').trennen()
