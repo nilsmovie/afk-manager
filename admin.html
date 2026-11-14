@@ -251,13 +251,29 @@
   .src-badge.discord { background: rgba(88, 101, 242, 0.18); color: #a5adff; }
   .log-detail { color: var(--text-sub); word-break: break-word; }
   .log-empty { padding: 14px; color: var(--text-sub); font-size: 13px; }
+
+  /* ---------- Server ---------- */
+  .card-hint { margin: -4px 0 12px; line-height: 1.5; }
+  .port-row { display: flex; gap: 10px; flex-wrap: wrap; }
+  .port-row > div { flex: 1 1 140px; }
+  .srv-badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; width: fit-content; background: rgba(82, 224, 138, 0.14); color: #52e08a; }
+  .srv-id { font-family: 'JetBrains Mono', monospace; font-size: 11.5px; color: var(--accent-strong); }
+  .tpl-list { margin: 6px 0 10px; display: flex; flex-direction: column; gap: 6px; }
+  .tpl-item { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 10px; border: 1px solid var(--border-row); border-radius: 8px; font-size: 13px; }
+  .tpl-text { font-family: 'JetBrains Mono', monospace; font-size: 12.5px; word-break: break-all; }
+  .tpl-add { display: flex; gap: 8px; flex-wrap: wrap; align-items: flex-start; }
+  .tpl-add input { margin: 0; }
+  .tpl-add input.tpl-text-in { flex: 3 1 200px; }
+  .tpl-add input.tpl-delay-in { flex: 1 1 90px; }
+  .panel-title { font-size: 12.5px; font-weight: 600; margin: 12px 0 4px; }
+  .panel-title:first-of-type { margin-top: 0; }
 </style>
 </head>
 <body>
 
 <div class="top-bar">
   <div>
-    <h1>⚙️ Benutzerverwaltung</h1>
+    <h1>⚙️ Verwaltung</h1>
     <div class="sub">AFK Manager - {{TITEL}}</div>
   </div>
   <div style="text-align:right;">
@@ -290,6 +306,36 @@
   <div class="card">
     <h2>Bestehende Benutzer</h2>
     <div id="userList"></div>
+  </div>
+
+  <div class="card" id="serverCard">
+    <div class="card-head">
+      <h2>Server</h2>
+      <button class="small ghost" onclick="toggleServerForm()">+ Server hinzufügen</button>
+    </div>
+    <p class="sub card-hint">Jeder Account läuft auf dem Standardserver. Hier kannst du weitere Server eintragen,
+      auf die einzelne Accounts zusätzlich gehen sollen.</p>
+    <div class="edit-panel" id="serverForm">
+      <div class="error-msg" id="serverFormError"></div>
+      <label class="field-label">Name</label>
+      <input id="srvName" maxlength="32" placeholder="z.B. Lobby" autocomplete="off" />
+      <label class="field-label">Kürzel für Discord (optional, sonst aus dem Namen gebildet) – z.B. lobby für <code>!start Name@lobby</code></label>
+      <input id="srvId" maxlength="24" placeholder="lobby" autocomplete="off" spellcheck="false" />
+      <label class="field-label">Adresse (ohne Port)</label>
+      <input id="srvHost" maxlength="253" placeholder="play.example.net" autocomplete="off" spellcheck="false" />
+      <div class="port-row">
+        <div>
+          <label class="field-label">Java-Port (leer = kein Java)</label>
+          <input id="srvJava" inputmode="numeric" maxlength="5" placeholder="25565" value="25565" />
+        </div>
+        <div>
+          <label class="field-label">Bedrock-Port (leer = kein Bedrock)</label>
+          <input id="srvBedrock" inputmode="numeric" maxlength="5" placeholder="19132" />
+        </div>
+      </div>
+      <button onclick="createServer()">Server anlegen</button>
+    </div>
+    <div id="serverList"></div>
   </div>
 
   <div class="card">
@@ -457,6 +503,7 @@ async function init() {
   renderChecklist(document.getElementById('newUserAccountChecklist'), []);
 
   await loadUsers();
+  loadServers();
   // Aktive Anmeldungen und Protokoll gibt es nur fuer den Owner
   if (myRole === 'owner') {
     document.querySelectorAll('.owner-only').forEach((el) => { el.style.display = ''; });
@@ -650,6 +697,172 @@ function fmtAgo(ms) {
   if (s < 3600) return `vor ${Math.round(s / 60)} Min.`;
   if (s < 86400) return `vor ${Math.round(s / 3600)} Std.`;
   return `vor ${Math.round(s / 86400)} Tagen`;
+}
+
+// ---------- Server ----------
+let allServers = [];
+const openServerPanels = new Set(); // Server-IDs, deren Bearbeiten-Bereich offen ist
+
+async function loadServers() {
+  const res = await fetch('/api/servers');
+  if (!res.ok) return;
+  const data = await res.json();
+  allServers = Array.isArray(data.servers) ? data.servers : [];
+  renderServers();
+}
+
+function toggleServerForm() {
+  document.getElementById('serverForm').classList.toggle('open');
+}
+
+function portText(p) { return p ? String(p) : '–'; }
+
+function renderServers() {
+  const wrap = document.getElementById('serverList');
+  wrap.innerHTML = '';
+  allServers.forEach((sv, i) => {
+    const tpl = Array.isArray(sv.autoChatTemplate) ? sv.autoChatTemplate : [];
+    const n = sv.connections;
+    const count = typeof n === 'number'
+      ? (sv.isDefault ? `${n} ${n === 1 ? 'Account' : 'Accounts'}` : `${n} ${n === 1 ? 'Verbindung' : 'Verbindungen'}`)
+      : '';
+    const row = document.createElement('div');
+    row.className = 'user-row';
+    row.innerHTML = `
+      <div class="user-info">
+        <span class="user-name">${escapeHtml(sv.name)} <span class="srv-id">@${escapeHtml(sv.id)}</span></span>
+        ${sv.isDefault ? '<span class="srv-badge">Standardserver (aus der .env)</span>' : ''}
+        <span class="allowed-list">${escapeHtml(sv.host || '(keine Adresse – MC_SERVER_HOST in der .env fehlt)')} · Java ${escapeHtml(portText(sv.javaPort))} · Bedrock ${escapeHtml(portText(sv.bedrockPort))}</span>
+        <span class="allowed-list">${escapeHtml(count)}${tpl.length ? ` · Auto-Chat-Vorlage: ${tpl.length} ${tpl.length === 1 ? 'Eintrag' : 'Einträge'}` : ''}</span>
+      </div>
+      <div class="user-actions">
+        <button class="small ghost" onclick="toggleServerEdit(${jsArg(sv.id)})">${sv.isDefault ? 'Vorlage' : 'Bearbeiten'}</button>
+        ${sv.isDefault ? '' : `<button class="small danger" onclick="deleteServer(${jsArg(sv.id)})">Löschen</button>`}
+      </div>
+      <div class="edit-panel${openServerPanels.has(sv.id) ? ' open' : ''}" id="srvEdit-${i}">
+        <div class="error-msg" id="srvError-${i}"></div>
+        <div class="success-msg" id="srvSuccess-${i}"></div>
+        ${sv.isDefault ? '' : `
+          <div class="panel-title">Server</div>
+          <label class="field-label">Name</label>
+          <input id="srvEditName-${i}" maxlength="32" value="${escapeHtml(sv.name)}" autocomplete="off" />
+          <label class="field-label">Adresse (ohne Port)</label>
+          <input id="srvEditHost-${i}" maxlength="253" value="${escapeHtml(sv.host)}" autocomplete="off" spellcheck="false" />
+          <div class="port-row">
+            <div>
+              <label class="field-label">Java-Port (leer = kein Java)</label>
+              <input id="srvEditJava-${i}" inputmode="numeric" maxlength="5" value="${escapeHtml(sv.javaPort || '')}" />
+            </div>
+            <div>
+              <label class="field-label">Bedrock-Port (leer = kein Bedrock)</label>
+              <input id="srvEditBedrock-${i}" inputmode="numeric" maxlength="5" value="${escapeHtml(sv.bedrockPort || '')}" />
+            </div>
+          </div>
+          <span class="sub">Das Kürzel <span class="srv-id">@${escapeHtml(sv.id)}</span> bleibt fest. Neue Adresse/Ports gelten ab der nächsten Verbindung.</span><br />
+          <button class="small" style="margin-top:8px" onclick="saveServer(${jsArg(sv.id)}, ${i})">Speichern</button>
+        `}
+        <div class="panel-title" style="margin-top:${sv.isDefault ? '0' : '16px'}">Auto-Chat-Vorlage</div>
+        <span class="sub">${sv.isDefault ? 'Neue Accounts' : 'Neue Verbindungen zu diesem Server'} bekommen diese Befehle als Auto-Chat
+          (Wartezeit in Sekunden nach dem Einloggen). Bestehende bleiben unverändert.</span>
+        <div class="tpl-list">
+          ${tpl.length ? tpl.map((e, k) => `
+            <div class="tpl-item">
+              <span><span class="tpl-text">${escapeHtml(e.text)}</span> <span class="sub">nach ${escapeHtml(e.delaySeconds)} s</span></span>
+              <button class="small ghost" onclick="removeTemplate(${jsArg(sv.id)}, ${k}, ${i})">Entfernen</button>
+            </div>`).join('') : '<span class="sub">(leer)</span>'}
+        </div>
+        <div class="tpl-add">
+          <input class="tpl-text-in" id="tplText-${i}" maxlength="256" placeholder="z.B. /afk" autocomplete="off" />
+          <input class="tpl-delay-in" id="tplDelay-${i}" inputmode="numeric" maxlength="5" value="5" placeholder="Sek." title="Sekunden nach dem Einloggen" aria-label="Wartezeit in Sekunden" />
+          <button class="small" onclick="addTemplate(${jsArg(sv.id)}, ${i})">+ Hinzufügen</button>
+        </div>
+      </div>
+    `;
+    wrap.appendChild(row);
+  });
+}
+
+function toggleServerEdit(id) {
+  if (openServerPanels.has(id)) openServerPanels.delete(id);
+  else openServerPanels.add(id);
+  renderServers();
+}
+
+async function sendJson(method, url, body) {
+  const res = await fetch(url, {
+    method,
+    headers: { 'Content-Type': 'application/json' },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  const data = await res.json().catch(() => ({}));
+  return { ok: res.ok, data };
+}
+
+async function createServer() {
+  const err = document.getElementById('serverFormError');
+  err.textContent = '';
+  const r = await sendJson('POST', '/api/servers', {
+    name: document.getElementById('srvName').value,
+    id: document.getElementById('srvId').value,
+    host: document.getElementById('srvHost').value,
+    javaPort: document.getElementById('srvJava').value,
+    bedrockPort: document.getElementById('srvBedrock').value,
+  });
+  if (!r.ok) { err.textContent = r.data.error || 'Fehler beim Anlegen'; return; }
+  ['srvName', 'srvId', 'srvHost', 'srvBedrock'].forEach((id) => { document.getElementById(id).value = ''; });
+  document.getElementById('srvJava').value = '25565';
+  document.getElementById('serverForm').classList.remove('open');
+  await loadServers();
+}
+
+async function saveServer(id, i) {
+  const err = document.getElementById(`srvError-${i}`);
+  err.textContent = '';
+  const r = await sendJson('PUT', `/api/servers/${encodeURIComponent(id)}`, {
+    name: document.getElementById(`srvEditName-${i}`).value,
+    host: document.getElementById(`srvEditHost-${i}`).value,
+    javaPort: document.getElementById(`srvEditJava-${i}`).value,
+    bedrockPort: document.getElementById(`srvEditBedrock-${i}`).value,
+  });
+  if (!r.ok) { err.textContent = r.data.error || 'Fehler beim Speichern'; return; }
+  await loadServers();
+  const ok = document.getElementById(`srvSuccess-${i}`);
+  if (ok) ok.textContent = 'Gespeichert.';
+}
+
+async function deleteServer(id) {
+  const sv = allServers.find((x) => x.id === id);
+  const confirmed = await showConfirm(`Server "${sv ? sv.name : id}" wirklich löschen?`, {
+    title: 'Server löschen',
+    okLabel: 'Löschen',
+    danger: true,
+  });
+  if (!confirmed) return;
+  const r = await sendJson('DELETE', `/api/servers/${encodeURIComponent(id)}`);
+  if (!r.ok) { showMessage(r.data.error || 'Fehler beim Löschen'); return; }
+  openServerPanels.delete(id);
+  await loadServers();
+}
+
+async function addTemplate(id, i) {
+  const err = document.getElementById(`srvError-${i}`);
+  err.textContent = '';
+  const r = await sendJson('POST', `/api/servers/${encodeURIComponent(id)}/autochat`, {
+    text: document.getElementById(`tplText-${i}`).value,
+    delaySeconds: document.getElementById(`tplDelay-${i}`).value,
+  });
+  if (!r.ok) { err.textContent = r.data.error || 'Fehler beim Speichern'; return; }
+  await loadServers();
+}
+
+async function removeTemplate(id, k, i) {
+  const r = await sendJson('DELETE', `/api/servers/${encodeURIComponent(id)}/autochat/${k}`);
+  if (!r.ok) {
+    const err = document.getElementById(`srvError-${i}`);
+    if (err) err.textContent = r.data.error || 'Fehler beim Entfernen';
+    return;
+  }
+  await loadServers();
 }
 
 // ---------- Eigenes Passwort ----------
