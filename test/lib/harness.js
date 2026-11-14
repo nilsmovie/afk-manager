@@ -108,7 +108,9 @@ class FakeJavaBot extends EventEmitter {
     this.heldItem = null
     this.steuerung = []
     this._client = new EventEmitter()
+    this._client.state = 'play'
     this._client.write = (name, params) => this.geschrieben.push([name, params])
+    this.paketeAngenommen = 0
     this._client.end = () => this.quit()
   }
 
@@ -121,9 +123,11 @@ class FakeJavaBot extends EventEmitter {
   dismount () { this.steuerung.push(['dismount']) }
   mount () { this.steuerung.push(['mount']) }
   attack () { this.steuerung.push(['attack']) }
+  acceptResourcePack () { this.paketeAngenommen++ }
 
   // ---- vom Test gesteuert ----
   einloggen () { this.drin = true; this.emit('login'); this.emit('spawn') }
+  ressourcenpaket (state = 'play') { this._client.state = state; this.emit('resourcePack', 'https://pack.test/p.zip'); this._client.state = 'play' }
   spawn () { this.emit('spawn') }
   kick (grund) { this.emit('kicked', grund, true); this.beendet = true; this.emit('end', 'kicked') }
   trennen () { this.beendet = true; this.emit('end', 'socketClosed') }

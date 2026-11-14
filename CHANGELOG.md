@@ -33,6 +33,15 @@ Standardserver weiter, ohne Neueinrichtung und ohne neuen Microsoft-Login.
   und das Feld `server` bei `onChat` (kommt weiterhin nur vom Standardserver).
 - **Tests**: `npm test` (21 Szenarien, nachgebaute Bots, nichts wird nach außen verbunden).
 
+### Behoben
+
+- **Server mit eigenem Ressourcenpaket** (Java): Accounts flogen nach wenigen Sekunden mit
+  „An internal error occurred in your connection.“ raus, weil mineflayer das Paket während der
+  Anmeldung nicht beantwortet hat. mineflayer ist jetzt auf 4.39 aktualisiert (beantwortet es
+  dort selbst und schickt in dieser Phase keine Bewegungspakete mehr); kommt ein Paket später im
+  Spiel, nimmt der Manager es an. Heruntergeladen wird nichts – ein AFK-Bot braucht keine
+  Texturen. Nach dem Update ist `npm install` nötig.
+
 ### Geändert
 
 - **„Alle Accounts wieder online“ ist ruhiger**: Die Meldung kommt nur nach einem echten
@@ -60,9 +69,12 @@ Standardserver weiter, ohne Neueinrichtung und ohne neuen Microsoft-Login.
 cd ~/afk-manager
 grep MC_SERVER_HOST .env     # muss eine Adresse zeigen, z.B. MC_SERVER_HOST=clashsmp.de
 git pull
-npm install
+npm install                  # nötig: neue mineflayer-Version
 sudo systemctl restart afk-manager
 ```
+
+Die Warnungen „EBADENGINE … required: { node: '>=24' }“ bei `npm install` (bedrock-protocol,
+nethernet …) gab es schon vorher, sie sind harmlos.
 
 ### Zurück zur Version davor
 
@@ -70,6 +82,7 @@ sudo systemctl restart afk-manager
 cd ~/afk-manager
 git log --oneline            # die Version vor "Mehrere Server" heraussuchen
 git checkout <nummer>
+npm install                  # passende Paketversionen dieser Version
 sudo systemctl restart afk-manager
 ```
 

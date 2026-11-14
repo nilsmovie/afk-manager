@@ -2567,6 +2567,20 @@ function startBot(username) {
     logChat(username, jsonMsg.toString());
   });
 
+  // Server verlangt ein Ressourcenpaket (eigene Texturen o.ae.): annehmen, ohne es herunterzuladen -
+  // ein AFK-Bot braucht keine Texturen. Ohne Antwort werfen manche Server den Account raus.
+  // (Waehrend der Anmeldung/Konfiguration antwortet mineflayer ab 4.39 selbst.)
+  bot.on('resourcePack', () => {
+    if (bots[username]?.bot !== bot) return;
+    if (!bot._client || bot._client.state !== 'play' || typeof bot.acceptResourcePack !== 'function') return;
+    try {
+      bot.acceptResourcePack();
+      console.log(`[${username}] Server schickt ein Ressourcenpaket - angenommen (wird nicht heruntergeladen)`);
+    } catch (e) {
+      console.warn(`[${username}] Ressourcenpaket konnte nicht beantwortet werden:`, e.message);
+    }
+  });
+
   bot.on('kicked', (reason) => {
     if (bots[username]?.bot !== bot) return;
     const reasonText = typeof reason === 'string' ? reason : JSON.stringify(reason);
