@@ -109,6 +109,7 @@ git checkout main          # später wieder auf den neuesten Stand
 
 Diese Dateien entstehen im laufenden Betrieb und kommen **nie** ins Repository (siehe
 `.gitignore`): `.env`, `accounts.json`, `users.json`, `servers.json`, `verbindungen.json`,
+`statistik.json`,
 `audit.log`, `audit-known-ips.json` und deren Sicherungskopien (auch
 `accounts.vor-mehrserver.json`). Die Microsoft-Logins liegen unter `~/.minecraft/nmp-cache`.
 Gib diese Dateien nie weiter – darin stehen Passwort-Hashes, Discord-Token und die Logins deiner

@@ -49,6 +49,17 @@ Standardserver weiter, ohne Neueinrichtung und ohne neuen Microsoft-Login.
   `verbindungen.json` (ältere Versionen ignorieren das). Beim ersten Neustart nach dem Update
   starten noch alle, weil es den Merker vorher nicht gab.
 
+- **Tageszusammenfassung übersteht Neustarts**: Die Online-Zeiten von heute stehen jede Minute
+  in `statistik.json`; nach einem Neustart am selben Tag zählen sie weiter (die Zeit, in der der
+  Manager aus war, zählt nicht). War der Manager um Mitternacht aus, wird die Zusammenfassung
+  des Vortags beim Start nachgeholt. Ein Neustart kurz nach Mitternacht schickt sie auch nicht
+  mehr doppelt.
+
+### Behoben (schon vor dieser Version)
+
+- Ein im Dashboard oder per `!stop` gestoppter Account zählte in der Online-Zeit weiter, bis er
+  wieder gestartet wurde – die Tageszusammenfassung war für gestoppte Accounts zu hoch.
+
 ### Geändert
 
 - **„Alle Accounts wieder online“ ist ruhiger**: Die Meldung kommt nur nach einem echten

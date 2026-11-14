@@ -1553,6 +1553,9 @@ function forceKillBot(username) {
     }
     neutralizeLoginAttempt(username, oldBot);
     state.bot = null;
+    // Der end/close-Handler ignoriert den abgeschossenen Bot (state.bot ist null) - die
+    // Online-Zeit muss deshalb hier enden, sonst zaehlt ein gestoppter Account weiter
+    markOffline(username);
   }
 }
 
@@ -4784,6 +4787,81 @@ loadExtensions(extApi);
 // So stehen echte volle 24h in der Zusammenfassung, und der neue Tageszaehler laeuft
 // ab genau 00:00 Uhr, ohne irgendwelche Abschneidungen.
 let lastDiscordSummaryDate = null;
+
+// Text der Zusammenfassung; msOf(key) liefert die Online-Zeit einer Verbindung
+function sendDailySummary(title, msOf) {
+  if (accounts.length === 0) return;
+  const lines = accounts.map((a) => `**${a.username}**: ${formatDurationServer(msOf(a.username))}`);
+  // Weitere Server jeweils als eigener Abschnitt
+  for (const sv of servers.filter((x) => !x.isDefault)) {
+    const keys = allConnKeys().filter((k) => connServerId(k) === sv.id);
+    if (keys.length === 0) continue;
+    lines.push('', `__${sv.name}__`);
+    keys.forEach((k) => lines.push(`**${connUser(k)}**: ${formatDurationServer(msOf(k))}`));
+  }
+  const text = lines.join('\n');
+  sendDiscordEmbed({
+    title,
+    description: text.length > 4000 ? text.slice(0, 3990) + '\n…' : text,
+    color: DISCORD_COLOR_INFO,
+  });
+}
+
+// ---------- Tagesstatistik ueber einen Neustart retten ----------
+// Die Online-Zeiten von heute stehen jede Minute (und beim Beenden) in statistik.json. Nach einem
+// Neustart am selben Tag zaehlen sie dort weiter, wo sie waren; die Zeit, in der der Manager aus
+// war, zaehlt nicht. War der Manager um Mitternacht aus, wird die Zusammenfassung des Vortags
+// beim Start nachgeholt (mit den Werten bis zum Beenden).
+const STATS_FILE = path.join(__dirname, 'statistik.json');
+function saveStats() {
+  try {
+    const totals = {};
+    for (const key of Object.keys(accountStats)) totals[key] = Math.round(getUptimeMs(key));
+    const data = JSON.stringify({ version: 1, day: getTodayStr(), savedAt: Date.now(), summarySentFor: lastDiscordSummaryDate, totals });
+    const tmp = STATS_FILE + '.tmp';
+    fs.writeFileSync(tmp, data);
+    fs.renameSync(tmp, STATS_FILE);
+  } catch (e) {
+    console.error('[Statistik] Speichern fehlgeschlagen:', e.message);
+  }
+}
+function restoreStats() {
+  if (!fs.existsSync(STATS_FILE)) return;
+  let raw;
+  try {
+    raw = JSON.parse(fs.readFileSync(STATS_FILE, 'utf8'));
+  } catch (e) {
+    console.warn('[Statistik] statistik.json nicht lesbar - Tageszähler beginnen bei 0:', e.message);
+    return;
+  }
+  if (!raw || typeof raw.day !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(raw.day) || !raw.totals || typeof raw.totals !== 'object') return;
+  const known = new Set(allConnKeys());
+  const totals = {};
+  for (const [key, ms] of Object.entries(raw.totals)) {
+    if (known.has(key) && Number.isFinite(ms) && ms >= 0) totals[key] = Math.min(ms, 24 * 60 * 60 * 1000);
+  }
+  if (typeof raw.summarySentFor === 'string') lastDiscordSummaryDate = raw.summarySentFor;
+  const today = getTodayStr();
+  if (raw.day === today) {
+    for (const [key, ms] of Object.entries(totals)) {
+      const st = ensureStats(key);
+      st.totalMs = ms;
+      st.sessionStart = null;
+      st.day = today;
+    }
+    console.log(`[Statistik] Online-Zeiten von heute übernommen (${Object.keys(totals).length} Verbindungen)`);
+  } else if (raw.day < today && lastDiscordSummaryDate !== raw.day) {
+    // Mitternacht verpasst (Manager war aus): Zusammenfassung des Tages nachholen
+    const [y, m, d] = raw.day.split('-');
+    console.log(`[Statistik] Zusammenfassung vom ${d}.${m}.${y} wird nachgeholt (Manager war um Mitternacht aus)`);
+    sendDailySummary(`📊 Tageszusammenfassung vom ${d}.${m}. (nachgeholt)`, (key) => totals[key] || 0);
+    lastDiscordSummaryDate = raw.day;
+  }
+}
+restoreStats();
+setInterval(saveStats, 60 * 1000).unref();
+process.on('exit', saveStats);
+
 setInterval(() => {
   const now = new Date();
   if (now.getHours() === 0 && now.getMinutes() === 0) {
@@ -4794,25 +4872,11 @@ setInterval(() => {
       // Schritt 1: Zusammenfassung mit den Werten des abgelaufenen Tages senden.
       // getUptimeMs() liefert hier noch die korrekten 24h-Werte, da ensureStats()
       // keinen automatischen Reset mehr macht.
-      if (accounts.length > 0) {
-        const lines = accounts.map((a) => `**${a.username}**: ${formatDurationServer(getUptimeMs(a.username))}`);
-        // Weitere Server jeweils als eigener Abschnitt
-        for (const sv of servers.filter((x) => !x.isDefault)) {
-          const keys = allConnKeys().filter((k) => connServerId(k) === sv.id);
-          if (keys.length === 0) continue;
-          lines.push('', `__${sv.name}__`);
-          keys.forEach((k) => lines.push(`**${connUser(k)}**: ${formatDurationServer(getUptimeMs(k))}`));
-        }
-        const text = lines.join('\n');
-        sendDiscordEmbed({
-          title: '📊 Tageszusammenfassung',
-          description: text.length > 4000 ? text.slice(0, 3990) + '\n…' : text,
-          color: DISCORD_COLOR_INFO,
-        });
-      }
+      sendDailySummary('📊 Tageszusammenfassung', getUptimeMs);
 
       // Schritt 2: Erst NACH dem Senden die Zaehler fuer den neuen Tag auf 0 setzen.
       resetDailyStats();
+      saveStats();
     }
   }
 }, 60 * 1000);

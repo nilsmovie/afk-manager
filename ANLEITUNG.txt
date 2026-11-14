@@ -44,6 +44,7 @@ Betrieb kommen weitere Dateien dazu:
    accounts.json, accounts.backup.json   (deine Minecraft-Accounts)
    users.json, users.backup.json         (Dashboard-Benutzer, Passwörter gehasht)
    servers.json, verbindungen.json       (nur bei mehreren Servern, Abschnitt 5b)
+   statistik.json                        (Online-Zeiten von heute, übersteht Neustarts)
    accounts.vor-mehrserver.json          (einmalige Sicherung, Abschnitt 5b)
    audit.log                             (Protokoll, Abschnitt 10)
    .env                                  (deine Einstellungen)
@@ -292,7 +293,10 @@ einschalten. Dann Rechtsklick auf Kanal oder Rolle > "ID kopieren".
 a) Webhooks (nur Nachrichten senden):
    Kanal bearbeiten > Integrationen > Webhooks > Neuer Webhook > URL kopieren.
    DISCORD_WEBHOOK_URL         Benachrichtigungen: Kicks, alle offline/online,
-                               Login-Codes, Tageszusammenfassung um 00:00 Uhr.
+                               Login-Codes, Tageszusammenfassung um 00:00 Uhr
+                               (ein Neustart setzt sie nicht zurück; war der
+                               Manager um Mitternacht aus, kommt sie beim
+                               nächsten Start "nachgeholt").
                                (Mit Bot: nur noch Rückfall, siehe b.)
    DISCORD_CHAT_WEBHOOK_URL    Spiegelt den Ingame-Chat (am besten eigener Kanal).
 

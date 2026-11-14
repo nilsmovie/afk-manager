@@ -17,6 +17,8 @@ servers.json
 servers.backup.json
 verbindungen.json
 verbindungen.backup.json
+statistik.json
+*.json.tmp
 
 # Protokoll (wer hat was gemacht, mit IP-Adressen)
 audit.log
