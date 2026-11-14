@@ -252,11 +252,16 @@
     gap: 14px;
     margin-bottom: 18px;
   }
+  .status-strips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 8px;
+  }
   .status-strip {
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    margin-top: 8px;
     padding: 4px 10px 4px 8px;
     background: var(--bg-card);
     border: 1px solid var(--card-border);
@@ -265,6 +270,8 @@
     color: var(--text-heading);
     width: fit-content;
   }
+  .status-strip .strip-server { font-weight: 600; max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .status-strip.total { color: var(--text-sub); }
   .status-strip .dot {
     width: 7px;
     height: 7px;
@@ -1079,10 +1086,9 @@
 <div class="top-bar">
   <div>
     <h1>AFK Manager</h1>
-    <div class="sub">Zielserver: {{SERVER}}</div>
-    <div class="status-strip" id="statusStrip">
-      <span class="dot"></span>
-      <span id="statusStripText">– / – online</span>
+    <div class="sub">Hauptserver: {{SERVER}}</div>
+    <div class="status-strips" id="statusStrips">
+      <span class="status-strip"><span class="dot"></span><span>– / – online</span></span>
     </div>
   </div>
   <div class="picker-group">
@@ -2175,7 +2181,7 @@ function renderAccounts(accounts) {
   // Alle Verbindungen zaehlen (ohne weitere Server = genau wie bisher)
   const flat = [];
   accounts.forEach((a) => { flat.push(a); (a.connections || []).forEach((c) => flat.push(c)); });
-  updateStatusStrip(flat);
+  updateStatusStrip(accounts);
   reactCatToStatus(flat);
 }
 
@@ -2204,13 +2210,38 @@ function reactCatToStatus(accounts) {
   lastTotalCount = total;
 }
 
+// Oben unter dem Titel: wie viele online sind - bei mehreren Servern pro Server getrennt,
+// dazu wie viele Accounts es insgesamt gibt
 function updateStatusStrip(accounts) {
-  const el = document.getElementById('statusStripText');
-  const dot = document.querySelector('#statusStrip .dot');
-  const total = accounts.length;
-  const online = accounts.filter((a) => a.status === 'online').length;
-  el.textContent = `${online} / ${total} online`;
-  dot.style.background = online > 0 ? 'var(--status-online-dot)' : 'var(--status-off-dot)';
+  const wrap = document.getElementById('statusStrips');
+  const groups = new Map([[DEFAULT_SERVER, { online: 0, total: 0 }]]);
+  const count = (sid, status) => {
+    const g = groups.get(sid) || { online: 0, total: 0 };
+    g.total++;
+    if (status === 'online') g.online++;
+    groups.set(sid, g);
+  };
+  accounts.forEach((a) => {
+    count(DEFAULT_SERVER, a.status);
+    (a.connections || []).forEach((c) => count(c.server, c.status));
+  });
+  // Reihenfolge wie in der Serverliste (Hauptserver zuerst)
+  const order = serverList.map((sv) => sv.id);
+  const ids = [...groups.keys()].sort((x, y) => {
+    const ix = order.indexOf(x) === -1 ? 999 : order.indexOf(x);
+    const iy = order.indexOf(y) === -1 ? 999 : order.indexOf(y);
+    return x === DEFAULT_SERVER ? -1 : y === DEFAULT_SERVER ? 1 : ix - iy;
+  });
+  const multi = ids.length > 1;
+  const pill = (sid) => {
+    const g = groups.get(sid);
+    const color = g.online > 0 ? 'var(--status-online-dot)' : 'var(--status-off-dot)';
+    const label = multi ? `<span class="strip-server" title="${escapeHtml(serverName(sid))}">${escapeHtml(serverName(sid))}</span>` : '';
+    return `<span class="status-strip" data-server="${escapeHtml(sid)}"><span class="dot" style="background:${color}"></span>${label}<span class="strip-count">${g.online} / ${g.total} online</span></span>`;
+  };
+  let html = ids.map(pill).join('');
+  if (multi) html += `<span class="status-strip total" title="Accounts insgesamt (ohne doppelte Zählung über mehrere Server)">${accounts.length} ${accounts.length === 1 ? 'Account' : 'Accounts'}</span>`;
+  wrap.innerHTML = html;
 }
 
 function updateChatStatusDisplay() {
