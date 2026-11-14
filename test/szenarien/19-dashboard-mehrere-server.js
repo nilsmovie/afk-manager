@@ -124,7 +124,9 @@ module.exports = {
     bot('event.test', 'bravo').einloggen()
     await p.waitForTimeout(800)
     t.chk('Neue Server-Zeile erscheint', (await p.$$eval('.conn-row', (els) => els.length)) === 3)
-    t.chk('Statusleiste zählt alle Verbindungen', /\/ 6 online/.test(await p.$eval('#statusStripText', (el) => el.textContent)), await p.$eval('#statusStripText', (el) => el.textContent))
+    const leiste = (await p.$$eval('#statusStrips .status-strip', (els) => els.map((e) => e.textContent.trim()))).join('|')
+    t.chk('Statusleiste pro Server + Accounts insgesamt', leiste === 'mc.test3 / 3 online|Lobby2 / 2 online|Event-Server1 / 1 online|3 Accounts', leiste)
+    t.chk('Kopf: "Hauptserver"', /Hauptserver: mc\.test/.test(await p.$eval('.top-bar .sub', (el) => el.textContent)))
     await ctx.close()
 
     // Handy-Breite + User-Rolle
