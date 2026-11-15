@@ -4283,11 +4283,37 @@ function javaBotFor(req, res) {
 }
 const slotNum = (v) => (typeof v === 'number' || (typeof v === 'string' && /^\d{1,2}$/.test(v)) ? Number(v) : NaN);
 
+// Fenstertitel (JSON, Text oder ab 1.20.3 NBT) als Text + farbige Stuecke wie im Chat
+const chatMessageByRegistry = new WeakMap();
+function windowTitleFor(bot) {
+  return (raw) => {
+    if (raw === null || raw === undefined || raw === '') return { text: '' };
+    let CM = chatMessageByRegistry.get(bot.registry);
+    if (!CM) {
+      CM = require('prismarine-chat')(bot.registry);
+      chatMessageByRegistry.set(bot.registry, CM);
+    }
+    const msg = CM.fromNotch(raw);
+    const text = msg.toString().replace(/\u00a7./g, '').slice(0, 120);
+    const segs = chatSegments(msg, bot.registry && bot.registry.language);
+    return segs ? { text, segs } : { text };
+  };
+}
+
+function windowTitleText(bot) {
+  if (!bot.currentWindow) return '';
+  try {
+    return windowTitleFor(bot)(bot.currentWindow.title).text.slice(0, 60);
+  } catch (e) {
+    return '';
+  }
+}
+
 app.get('/api/inventory/:username', requireAccountAccess, (req, res) => {
   const bot = javaBotFor(req, res);
   if (!bot) return;
   try {
-    res.json(ingame.inventorySnapshot(bot));
+    res.json(ingame.inventorySnapshot(bot, { formatTitle: windowTitleFor(bot) }));
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -4331,6 +4357,44 @@ app.post('/api/inventory/:username/hold', requireAccountAccess, (req, res) => {
     res.json(ingame.holdHotbar(bot, slot));
   } catch (e) {
     res.status(400).json({ error: e.message });
+  }
+});
+
+// Offene Fenster (Kisten, Menues von Plugins ...): klicken und schliessen
+app.post('/api/inventory/:username/window-click', requireAccountAccess, async (req, res) => {
+  const bot = javaBotFor(req, res);
+  if (!bot) return;
+  const b = req.body || {};
+  const windowId = Number(b.windowId);
+  const slot = (typeof b.slot === 'number' || typeof b.slot === 'string') && /^-?\d{1,3}$/.test(String(b.slot)) ? Number(b.slot) : NaN;
+  const slotOk = slot === -999 || (Number.isInteger(slot) && slot >= 0 && slot < 120);
+  const button = Number(b.button);
+  if (!Number.isInteger(windowId) || !slotOk || (button !== 0 && button !== 1)) {
+    return res.status(400).json({ error: 'Ungültiger Klick' });
+  }
+  try {
+    const title = windowTitleText(bot);
+    const r = await ingame.windowClick(bot, windowId, slot, button, windowTitleFor(bot));
+    const what = slot === -999 ? 'außerhalb des Fensters'
+      : r.item ? `${r.item.count}× ${(r.item.custom || r.item.label).slice(0, 60)}` : 'leeren Platz';
+    auditWeb(req, 'Klick im Fenster', req.params.username,
+      `${button === 1 ? 'Rechtsklick' : 'Linksklick'} auf ${what}${title ? ` in „${title}“` : ''}`);
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+app.post('/api/inventory/:username/window-close', requireAccountAccess, (req, res) => {
+  const bot = javaBotFor(req, res);
+  if (!bot) return;
+  try {
+    const title = windowTitleText(bot);
+    const r = ingame.windowClose(bot);
+    if (r.wasOpen) auditWeb(req, 'Fenster geschlossen', req.params.username, title ? `„${title}“` : '');
+    res.json(r);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
   }
 });
 

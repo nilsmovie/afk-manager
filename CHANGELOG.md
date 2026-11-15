@@ -1,5 +1,18 @@
 # Änderungen
 
+## Fenster und Menüs im Inventar (November 2026)
+
+- **Offene Fenster im Dashboard**: Öffnet ein Account im Spiel ein Fenster – eine Kiste, einen
+  Ofen oder ein Menü eines Plugins nach einem Befehl –, zeigt das Inventar-Widget dieses Fenster
+  wie im Spiel: oben der Inhalt (passendes Raster für Kisten, Trichter, Werkbank, Ofen, Amboss …),
+  darunter das eigene Inventar, dazu das Item, das gerade „an der Maus“ hängt.
+- Fenstertitel, Item-Namen und **Beschreibungen (Lore)** in den Farben aus dem Spiel; Zeichen
+  eigener Menü-Grafiken aus Ressourcenpaketen werden ausgeblendet.
+- **Klicken**: mit der Maus direkt Links- und Rechtsklick; am Handy Item antippen und dann
+  „Linksklick“, „Rechtsklick“ oder „Abbrechen“. Klick außerhalb („Wegwerfen“) mit Nachfrage.
+- **Schließen** mit dem Knopf oder der Esc-Taste. Klicks und Schließen stehen im Protokoll;
+  es darf, wer den Account steuern darf.
+
 ## Inventar: Verzauberungen, leere Hand, Essen (November 2026)
 
 - **Verzauberungen** werden in allen Minecraft-Versionen erkannt (ab 1.20.5 standen sie nicht
