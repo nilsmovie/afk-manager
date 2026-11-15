@@ -201,17 +201,51 @@ function germanName(itemName) {
   return lang[`item.minecraft.${itemName}`] || lang[`block.minecraft.${itemName}`] || null;
 }
 
+// Zuordnung Item -> Bild aus den Modellen des Spiels (npm run bilder schreibt item-icons/icons.json):
+// Stufen, Zäune, Truhen, Betten ... haben kein eigenes Bild mit ihrem Namen.
+const ICON_REL_RE = /^(item|block|made)\/[a-z0-9_]{1,64}\.png$/;
+let iconMap = { checked: 0, version: 0, data: null };
+function iconState() {
+  if (Date.now() - iconMap.checked < 30 * 1000) return iconMap;
+  let version = 0;
+  let data = null;
+  try {
+    const file = path.join(ICONS_DIR, 'icons.json');
+    const st = fs.statSync(file);
+    version = Math.floor(st.mtimeMs / 1000);
+    data = version === iconMap.version && iconMap.data ? iconMap.data : JSON.parse(fs.readFileSync(file, 'utf8'));
+  } catch (e) {
+    try { version = Math.floor(fs.statSync(path.join(ICONS_DIR, 'item')).mtimeMs / 1000); } catch (e2) { version = 0; }
+    data = null;
+  }
+  if (version !== iconMap.version) iconCache.clear(); // neue Bilder -> neu suchen
+  iconMap = { checked: Date.now(), version, data: data && typeof data === 'object' && data.items && typeof data.items === 'object' ? data.items : null };
+  return iconMap;
+}
+// Ändert sich, wenn "npm run bilder" neu lief (damit der Browser neue Bilder lädt)
+function iconsVersion() {
+  if (!iconsAvailable()) return 0;
+  return iconState().version || 1;
+}
+
 // Erstes passendes Bild zu einem Item-Namen (oder null)
 const iconCache = new Map();
 const ICON_NAME_RE = /^[a-z0-9_]{1,64}$/;
+const ICON_ALIAS = { enchanted_golden_apple: 'golden_apple', debug_stick: 'stick' };
 function iconFile(name) {
   if (!ICON_NAME_RE.test(name)) return null;
+  const state = iconState();
   if (iconCache.has(name)) return iconCache.get(name);
+  const mapped = state.data && typeof state.data[name] === 'string' && ICON_REL_RE.test(state.data[name]) ? state.data[name] : null;
   const tries = [
-    `item/${name}.png`, `block/${name}.png`, `item/${name}_00.png`,
+    `item/${name}.png`,
+    ...(mapped ? [mapped] : []),
+    `block/${name}.png`, `item/${name}_00.png`,
     `block/${name}_front.png`, `block/${name}_side.png`, `block/${name}_top.png`,
     // Holz/Pflanzen u.ae.: "oak_log" -> "oak_log.png" gibt es; "oak_wood" -> "oak_log.png"
     `block/${name.replace(/_wood$/, '_log')}.png`, `block/${name.replace(/^stripped_(.*)_wood$/, 'stripped_$1_log')}.png`,
+    ...(ICON_ALIAS[name] ? [`item/${ICON_ALIAS[name]}.png`] : []),
+    `block/${name.replace(/^infested_/, '')}.png`,
   ];
   let found = null;
   for (const rel of tries) {
@@ -228,6 +262,7 @@ function iconsAvailable() {
 }
 function clearIconCache() {
   iconCache.clear();
+  iconMap = { checked: 0, version: 0, data: null };
   langCache = { at: 0, data: null };
 }
 
@@ -341,6 +376,18 @@ function readLore(item, fmt) {
   return out;
 }
 
+// Items, die im Spiel immer glitzern (ohne Verzauberung) - oder per Komponente glitzern sollen
+const GLINT_ITEMS = new Set(['enchanted_golden_apple', 'enchanted_book', 'experience_bottle', 'nether_star', 'end_crystal', 'debug_stick']);
+function hasGlint(item) {
+  try {
+    const c = item.componentMap && item.componentMap.get && item.componentMap.get('enchantment_glint_override');
+    if (c && typeof c.data === 'boolean') return c.data;
+  } catch (e) {
+    // egal
+  }
+  return GLINT_ITEMS.has(String(item.name || ''));
+}
+
 function itemInfo(item, slot, registry, fmt) {
   if (!item) return null;
   let custom = '';
@@ -366,6 +413,7 @@ function itemInfo(item, slot, registry, fmt) {
     stackSize: Number(item.stackSize) || 64,
     enchants,
     edible: isConsumable(item.name, registry) || undefined,
+    glint: hasGlint(item) || undefined,
   };
   try {
     if (item.maxDurability) {
@@ -414,7 +462,7 @@ function inventorySnapshot(bot, opts = {}) {
     inBoat: isBoatEntity(v),
     health: typeof bot.health === 'number' ? Math.round(bot.health * 10) / 10 : null,
     food: typeof bot.food === 'number' ? bot.food : null,
-    icons: iconsAvailable(),
+    icons: iconsVersion(),
   };
 }
 

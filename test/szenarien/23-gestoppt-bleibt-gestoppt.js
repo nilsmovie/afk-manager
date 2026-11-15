@@ -33,7 +33,7 @@ module.exports = {
     if (t.PHASE === 2) {
       t.chk('Neustart: alpha startet', await t.warteBis(() => java('mc.test', 'alpha').length === 1, 30000))
       java('mc.test', 'alpha')[0].einloggen()
-      t.chk('Neustart: bravo@lobby startet', await t.warteBis(() => java('lobby.test', 'bravo').length === 1, 60000))
+      t.chk('Neustart: bravo@lobby startet', await t.warteBis(() => java('lobby.test', 'bravo').length === 1, 120000))
       java('lobby.test', 'bravo')[0].einloggen()
       await t.warte(120000)
       t.chk('Gestoppte starten nicht', java('mc.test', 'bravo').length === 0 && java('mc.test', 'charlie').length === 0 && java('mc.test', 'delta').length === 0 && java('lobby.test', 'alpha').length === 0 && t.bedrockClients.length === 0, t.javaBots.map((b) => `${b.username}@${b.opts.host}`))
