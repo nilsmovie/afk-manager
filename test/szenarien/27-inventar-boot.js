@@ -6,7 +6,7 @@ module.exports = {
   name: 'Inventar und Boot',
   accounts: [{ username: 'alpha', everJoined: true }, { username: 'bravo', everJoined: true }, { username: '.bed', everJoined: true }],
   dateien: {
-    'item-icons/de_de.json': JSON.stringify({ 'item.minecraft.diamond_sword': 'Diamantschwert', 'block.minecraft.oak_log': 'Eichenstamm', 'block.minecraft.oak_planks': 'Eichenholzbretter' }),
+    'item-icons/de_de.json': JSON.stringify({ 'item.minecraft.diamond_sword': 'Diamantschwert', 'block.minecraft.oak_log': 'Eichenstamm', 'block.minecraft.oak_planks': 'Eichenholzbretter', 'enchantment.minecraft.sharpness': 'Schärfe', 'enchantment.minecraft.mending': 'Reparatur', 'item.minecraft.bread': 'Brot' }),
     'item-icons/item/diamond_sword.png': PNG,
     'item-icons/block/oak_log.png': Buffer.concat([PNG, Buffer.from('LOG')]),
   },
@@ -87,6 +87,38 @@ module.exports = {
     t.chk('Protokoll: Droppen mit Item', e.some((x) => x.action === 'Item gedroppt' && x.target === 'alpha' && /1× Eichenstamm/.test(x.detail)), e.slice(0, 8))
     t.chk('Protokoll: Craften', e.some((x) => x.action === 'Gecraftet' && /12× Eichenholzbretter/.test(x.detail)))
 
+    // ---------- Verzauberungen (alle Formate), leere Hand, Essen, Rechtsklick halten ----------
+    const reg = b.registry
+    const comp = (type, list) => new Map([[type, { type, data: { enchantments: list, showTooltip: true } }]])
+    inv.setzen(37, 'diamond_pickaxe', 1, { enchants: { enchantments: [{ id: reg.enchantmentsByName.efficiency.id, level: 4 }, { id: reg.enchantmentsByName.mending.id, level: 1 }], showTooltip: true }, componentMap: comp('enchantments', [{ id: reg.enchantmentsByName.efficiency.id, level: 4 }, { id: reg.enchantmentsByName.mending.id, level: 1 }]) })
+    inv.setzen(10, 'enchanted_book', 1, { enchants: { enchantments: [], showTooltip: true }, componentMap: comp('stored_enchantments', [{ id: reg.enchantmentsByName.sharpness.id, level: 3 }]) })
+    inv.setzen(11, 'bread', 3)
+    inv.setzen(12, 'golden_apple', 1)
+    r = await t.api('GET', '/api/inventory/alpha')
+    const lbl = (i) => (r.data.slots[i] ? r.data.slots[i].enchants.map((e) => e.label) : [])
+    t.chk('Verzauberung (alte Form) mit deutschem Namen und Stufe', lbl(36).join() === 'Schärfe V', lbl(36))
+    t.chk('Verzauberung (ab 1.20.5, Komponente): Stufe, "Reparatur" ohne I', lbl(37).join() === 'Efficiency IV,Reparatur', lbl(37))
+    t.chk('Verzaubertes Buch: gespeicherte Verzauberung', lbl(10).join() === 'Schärfe III', lbl(10))
+    t.chk('Essbar markiert', r.data.slots[11].edible === true && !r.data.slots[20].edible)
+    r = await t.api('POST', '/api/inventory/alpha/hold', { slot: 41 })
+    t.chk('Leeren Schnellleisten-Platz in die Hand nehmen', r.status === 200 && b.quickBarSlot === 5)
+    b.food = 14
+    r = await t.api('POST', '/api/inventory/alpha/eat', { slot: 11 })
+    t.chk('Essen aus dem Inventar: in die Hand und gegessen', r.status === 200 && b.steuerung.some((x) => x[0] === 'consume' && x[1] === 'bread') && inv.slots[41] && inv.slots[41].count === 2 && !inv.slots[11], r.data)
+    b.food = 20
+    r = await t.api('POST', '/api/inventory/alpha/eat', { slot: 41 })
+    t.chk('Satt: verständliche Meldung', r.status === 400 && /satt/.test(r.data.error), r.data)
+    r = await t.api('POST', '/api/inventory/alpha/eat', { slot: 12 })
+    t.chk('Goldener Apfel geht auch satt', r.status === 200, r.data)
+    t.chk('Nicht Essbares abgelehnt', (await t.api('POST', '/api/inventory/alpha/eat', { slot: 37 })).status === 400)
+    r = await t.api('POST', '/api/control/alpha/rightclick', { hold: true })
+    t.chk('Rechtsklick gedrückt: Item benutzen', r.status === 200 && b.steuerung.some((x) => x[0] === 'activate'), r.data)
+    await t.api('POST', '/api/control/alpha/rightclick-release')
+    t.chk('Rechtsklick losgelassen: Benutzen beenden', b.steuerung.filter((x) => x[0] === 'deactivate').length === 1)
+    await t.api('POST', '/api/control/alpha/rightclick-release')
+    t.chk('Loslassen ohne Drücken: nichts', b.steuerung.filter((x) => x[0] === 'deactivate').length === 1)
+    await t.api('POST', '/api/inventory/alpha/hold', { slot: 38 })
+
     // ---------- Boot ----------
     // Wasser bis y=61, darüber Luft; bei z >= 6 eine Steinwand
     b.welt = (x, y, z) => {
@@ -165,6 +197,18 @@ module.exports = {
         await p.click('#invBody .slot[data-slot="44"]')
         await p.waitForTimeout(800)
         t.chk('Browser: Klick auf anderen Platz verschiebt', inv.slots[44] && inv.slots[44].name === 'diamond_sword' && !inv.slots[36])
+        await p.click('#invBody .slot[data-slot="44"]')
+        t.chk('Browser: Verzauberungen im Detail', /Schärfe V/.test(await p.$eval('#invDetail', (el) => el.textContent)))
+        await p.click('#invDetail button:has-text("Abwählen")')
+        b.food = 10
+        await p.click('#invBody .slot[data-slot="12"]') // Brot (wurde vom goldenen Apfel dorthin getauscht)
+        t.chk('Browser: Essen-Knopf bei Essen', (await p.$$('#invDetail button:has-text("Essen")')).length === 1)
+        await p.click('#invDetail button:has-text("Essen")')
+        await p.waitForTimeout(800)
+        t.chk('Browser: Essen klappt (in die Hand und gegessen)', inv.slots[38] && inv.slots[38].name === 'bread' && inv.slots[38].count === 1, inv.slots[38])
+        await p.click('#invBody .slot[data-slot="43"]') // leer
+        await p.waitForTimeout(800)
+        t.chk('Browser: leeren Schnellleisten-Platz anklicken = in die Hand', b.quickBarSlot === 7, b.quickBarSlot)
         // Rezepte
         await p.click('#invRecipesBtn')
         await p.waitForTimeout(800)

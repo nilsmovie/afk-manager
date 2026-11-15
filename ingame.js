@@ -260,13 +260,55 @@ function plainChat(v, depth = 0) {
 //  9-35 Inventar, 36-44 Schnellleiste, 45 Zweithand
 const SLOT_COUNT = 46;
 
-function itemInfo(item, slot) {
+// Verzauberungen in jeder Minecraft-Version lesen. Ab 1.20.5 stehen sie als "Komponente" am Item
+// ({ enchantments: [{ id, level }] }), davor im NBT ([{ name, lvl }]); Buecher haben eigene
+// ("gespeicherte") Verzauberungen.
+const ROMAN = ['', 'I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X'];
+function readEnchants(item, registry) {
+  const fromComponent = (type) => {
+    try {
+      return item.componentMap && item.componentMap.has(type) ? item.componentMap.get(type).data : null;
+    } catch (e) {
+      return null;
+    }
+  };
+  let raw = fromComponent('stored_enchantments') || null;
+  if (!raw || (Array.isArray(raw.enchantments) && raw.enchantments.length === 0)) {
+    try { raw = item.enchants; } catch (e) { raw = fromComponent('enchantments'); }
+  }
+  const list = Array.isArray(raw) ? raw : raw && Array.isArray(raw.enchantments) ? raw.enchantments : [];
+  return list.slice(0, 16).map((e) => {
+    const lvl = Number(e.lvl !== undefined ? e.lvl : e.level) || 0;
+    let name = typeof e.name === 'string' ? e.name : null;
+    if (!name && typeof e.id === 'number' && registry && registry.enchantments && registry.enchantments[e.id]) name = registry.enchantments[e.id].name;
+    if (!name && typeof e.id === 'string') name = e.id.replace(/^minecraft:/, '');
+    name = String(name || 'unbekannt');
+    const lang = germanNames();
+    let label = lang && lang[`enchantment.minecraft.${name}`];
+    if (!label && registry && registry.enchantmentsByName && registry.enchantmentsByName[name]) label = registry.enchantmentsByName[name].displayName;
+    if (!label) label = name.replace(/_/g, ' ');
+    // Stufe nur zeigen, wenn es mehr als eine gibt (wie im Spiel: "Reparatur" statt "Reparatur I")
+    const max = registry && registry.enchantmentsByName && registry.enchantmentsByName[name] ? registry.enchantmentsByName[name].maxLevel : 0;
+    const levelText = max === 1 && lvl === 1 ? '' : (ROMAN[lvl] || String(lvl));
+    return { name, lvl, label: levelText ? `${label} ${levelText}` : label };
+  });
+}
+
+// Essen/Trinken: was laesst sich "benutzen", bis es aufgebraucht ist?
+const ALWAYS_EDIBLE = ['potion', 'milk_bucket', 'honey_bottle', 'golden_apple', 'enchanted_golden_apple', 'chorus_fruit', 'suspicious_stew'];
+function isConsumable(name, registry) {
+  if (!name) return false;
+  if (ALWAYS_EDIBLE.includes(name)) return true;
+  return !!(registry && registry.foodsByName && registry.foodsByName[name]);
+}
+
+function itemInfo(item, slot, registry) {
   if (!item) return null;
   let custom = '';
   try { custom = plainChat(item.customName).slice(0, 64); } catch (e) { custom = ''; }
   let enchants = [];
   try {
-    enchants = (item.enchants || []).slice(0, 12).map((e) => ({ name: String(e.name || ''), lvl: Number(e.lvl) || 0 }));
+    enchants = readEnchants(item, registry);
   } catch (e) {
     enchants = [];
   }
@@ -278,6 +320,7 @@ function itemInfo(item, slot) {
     count: Number(item.count) || 0,
     stackSize: Number(item.stackSize) || 64,
     enchants,
+    edible: isConsumable(item.name, registry) || undefined,
   };
   try {
     if (item.maxDurability) {
@@ -293,7 +336,7 @@ function itemInfo(item, slot) {
 function inventorySnapshot(bot) {
   const slots = [];
   const src = (bot.inventory && bot.inventory.slots) || [];
-  for (let i = 0; i < SLOT_COUNT; i++) slots.push(itemInfo(src[i], i));
+  for (let i = 0; i < SLOT_COUNT; i++) slots.push(itemInfo(src[i], i, bot.registry));
   const v = bot.vehicle;
   return {
     slots,
@@ -347,7 +390,7 @@ async function dropItem(bot, slot, all) {
     await ensureInventoryWindow(bot);
     const item = bot.inventory.slots[slot];
     if (!item) throw new Error('Auf diesem Platz liegt nichts');
-    const info = itemInfo(item, slot);
+    const info = itemInfo(item, slot, bot.registry);
     const count = all ? item.count : 1;
     await bot.clickWindow(slot, all ? 1 : 0, 4);
     return { ok: true, item: info, count };
@@ -357,6 +400,29 @@ async function dropItem(bot, slot, all) {
 function holdHotbar(bot, slot) {
   bot.setQuickBarSlot(slot - 36);
   return { ok: true };
+}
+
+// Essen/Trinken: Item aus dem Platz in die Hand nehmen (Schnellleiste: dorthin wechseln, sonst in
+// den aktuellen Handplatz legen) und benutzen, bis es aufgegessen ist (wie Rechtsklick halten)
+async function eatItem(bot, slot) {
+  return runExclusive(bot, async () => {
+    await ensureInventoryWindow(bot);
+    const item = bot.inventory.slots[slot];
+    if (!item) throw new Error('Auf diesem Platz liegt nichts');
+    if (!isConsumable(item.name, bot.registry)) throw new Error('Das kann man nicht essen oder trinken');
+    if (!ALWAYS_EDIBLE.includes(item.name) && typeof bot.food === 'number' && bot.food >= 20) {
+      throw new Error('Der Account ist satt – essen geht erst wieder mit Hunger');
+    }
+    if (slot === 45) throw new Error('Aus der Zweithand geht das hier nicht – erst in die Schnellleiste legen');
+    if (slot >= 36 && slot <= 44) {
+      if (bot.quickBarSlot !== slot - 36) bot.setQuickBarSlot(slot - 36);
+    } else {
+      await bot.moveSlotItem(slot, 36 + (bot.quickBarSlot || 0));
+    }
+    const label = germanName(item.name) || item.displayName || item.name;
+    await bot.consume();
+    return { ok: true, label };
+  }, 15000);
 }
 
 // ---------- Craften ----------
@@ -432,6 +498,8 @@ module.exports = {
   moveItem,
   dropItem,
   holdHotbar,
+  eatItem,
+  readEnchants,
   craftableList,
   craftItem,
   validSlot,
