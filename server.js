@@ -9,6 +9,8 @@ const mineflayer = require('mineflayer');
 const crypto = require('crypto');
 const net = require('net');
 const ingame = require('./ingame');
+const microsoftLogin = require('./microsoft-login');
+microsoftLogin.install(); // Microsoft-Login: Ablehnung sofort erkennen statt 15 Min. weiter zu fragen
 const v8 = require('v8');
 const { promisify } = require('util');
 const { monitorEventLoopDelay } = require('perf_hooks');
@@ -1545,6 +1547,9 @@ function forceKillBot(username) {
   if (state && state.boat) state.boat.stop();
   if (state && state.bot) {
     const oldBot = state.bot;
+    // Zuerst abkoppeln: Der end/close-Handler soll den abgeschossenen Bot ignorieren - auch wenn
+    // ein Client 'close' noch waehrend close() selbst meldet (sonst plant er einen neuen Versuch)
+    state.bot = null;
     try {
       if (typeof oldBot.quit === 'function') oldBot.quit('Erzwungener Abbruch');
       else if (typeof oldBot.close === 'function') oldBot.close(); // Bedrock-Client
@@ -1554,7 +1559,6 @@ function forceKillBot(username) {
       console.error(`Fehler beim erzwungenen Abbruch von ${username}:`, e.message);
     }
     neutralizeLoginAttempt(username, oldBot);
-    state.bot = null;
     // Der end/close-Handler ignoriert den abgeschossenen Bot (state.bot ist null) - die
     // Online-Zeit muss deshalb hier enden, sonst zaehlt ein gestoppter Account weiter
     markOffline(username);
@@ -1662,6 +1666,31 @@ function msaCodeExpired(username, ref) {
   requestBotStart(username);
 }
 
+// Microsoft hat die Anmeldung nach der Code-Eingabe abgelehnt (z.B. "user interaction is
+// required"). Ein neuer Code hilft dann meist nicht - erst muss jemand das Konto pruefen. Deshalb:
+// Login pausieren, verstaendlich melden, Start drueckt man, wenn das Konto in Ordnung ist.
+function msaLoginRejected(username, ref, err) {
+  const st = bots[username];
+  if (!st || st.bot !== ref) return;
+  const reason = String((err && err.message) || '').replace(/^Microsoft hat die Anmeldung abgelehnt\s*/, '').split('\n')[0].slice(0, 300);
+  console.warn(`[${username}] Microsoft hat die Anmeldung abgelehnt ${reason}`);
+  io.emit('msa-code-clear', { username });
+  forceKillBot(username);
+  msaPaused.add(connUser(username));
+  st.msaSkipped = true;
+  st.status = 'Microsoft lehnt Login ab – Konto prüfen';
+  if (currentlyProcessing === username) {
+    if (sequentialWatchdogTimer) { clearTimeout(sequentialWatchdogTimer); sequentialWatchdogTimer = null; }
+    currentlyProcessing = null;
+    setTimeout(() => advanceSequentialQueue(), SEQUENTIAL_STEP_DELAY_MS);
+  }
+  logChat(username, `--- Microsoft hat die Anmeldung abgelehnt ${reason} ---`);
+  logChat(username, '--- Bitte das Microsoft-Konto prüfen (auf account.microsoft.com anmelden, offene Abfragen bestätigen, ggf. Zwei-Schritt-Verifizierung einschalten), dann Start drücken ---');
+  updateMsaCodeMessage(username, 'rejected', reason);
+  broadcastAccountList();
+  wakeLoginSiblings(username);
+}
+
 // Microsoft-Login ist durch (Code eingegeben), die Verbindung zum Server baut sich aber noch auf.
 // Ohne das stand bis zum Spawn weiter "Login nötig (Code eingeben)" - bei Bedrock (NetherNet)
 // dauert das manchmal lange oder klappt gar nicht, dann sah es aus, als hätte der Code nicht geklappt.
@@ -1705,8 +1734,8 @@ function queueMsaDiscord(username, fn) {
   return next;
 }
 
-function updateMsaCodeMessage(username, how) {
-  return queueMsaDiscord(username, () => updateMsaCodeMessageNow(username, how));
+function updateMsaCodeMessage(username, how, extra) {
+  return queueMsaDiscord(username, () => updateMsaCodeMessageNow(username, how, extra));
 }
 
 // Microsoft-Link, in dem der Code schon steckt (".../link?otc=CODE") - ein Klick genuegt.
@@ -1747,10 +1776,13 @@ async function announceMsaCode(username, label, data, expiresAt) {
 }
 
 // Aktualisiert die Discord-Nachricht mit dem letzten Code, statt neue Nachrichten zu stapeln.
-async function updateMsaCodeMessageNow(username, how) {
+async function updateMsaCodeMessageNow(username, how, extra) {
   const entry = msaCodeMessages[username];
   const label = entry ? entry.label : username;
+  const rejectedText = `Microsoft hat die Anmeldung abgelehnt${extra ? `: „${String(extra).slice(0, 300)}“` : '.'}\n` +
+    'Bitte das Microsoft-Konto prüfen (auf account.microsoft.com anmelden, offene Abfragen bestätigen, ggf. Zwei-Schritt-Verifizierung einschalten) und dann auf Start drücken.';
   const texts = {
+    rejected: { title: `❌ Login für ${label} abgelehnt`, description: rejectedText, color: DISCORD_COLOR_WARN },
     ok: { title: `✅ ${label} ist angemeldet`, description: 'Der Login hat geklappt, der Code wird nicht mehr gebraucht.', color: DISCORD_COLOR_OK },
     replaced: { title: `⌛ Code für ${label} abgelaufen`, description: 'Es gibt einen neuen Code (nächste Nachricht).', color: DISCORD_COLOR_WARN },
     expired: { title: `⌛ Code für ${label} abgelaufen`, description: 'Gleich kommt ein neuer Code.', color: DISCORD_COLOR_WARN },
@@ -1760,20 +1792,23 @@ async function updateMsaCodeMessageNow(username, how) {
   const t = texts[how];
   if (!t) return;
   if (!entry) {
-    // Keine Code-Nachricht zum Aendern (z.B. per Webhook gesendet) - nur die Pause ist wichtig genug
+    // Keine Code-Nachricht zum Aendern (z.B. per Webhook gesendet) - nur Pause/Ablehnung sind wichtig genug
     if (how === 'paused') {
       await notifyDiscordChannelWithStartButton(username, `⏸️ **Login für ${label} pausiert:** ${MSA_MAX_CODES} Codes hintereinander wurden nicht eingegeben. Klick unten, wenn du dich anmelden willst:`);
+    } else if (how === 'rejected') {
+      await notifyDiscordChannelWithStartButton(username, `❌ **Login für ${label} abgelehnt.** ${rejectedText}`);
     }
     return;
   }
   delete msaCodeMessages[username];
   const payload = { embeds: [{ ...t, timestamp: new Date().toISOString() }], components: [] };
-  if (how === 'paused') payload.components = [startButtonRow(username)];
+  if (how === 'paused' || how === 'rejected') payload.components = [startButtonRow(username)];
   try {
     await entry.msg.edit(payload);
   } catch (e) {
     console.error(`Discord: Code-Nachricht fuer ${username} konnte nicht aktualisiert werden:`, e.message);
     if (how === 'paused') await notifyDiscordChannelWithStartButton(username, `⏸️ **Login für ${label} pausiert.** Klick unten, wenn du dich anmelden willst:`);
+    if (how === 'rejected') await notifyDiscordChannelWithStartButton(username, `❌ **Login für ${label} abgelehnt.** ${rejectedText}`);
   }
 }
 
@@ -2799,6 +2834,7 @@ function startBot(username) {
 
   bot.on('error', (err) => {
     if (bots[username]?.bot !== bot) return;
+    if (err && err.code === microsoftLogin.REJECTED) { msaLoginRejected(username, bot, err); return; }
     logChat(username, `--- Fehler: ${err.message} ---`);
 
     // Manche Fehler (z.B. "array size is abnormally large" von minecraft-protocol)
@@ -3520,6 +3556,7 @@ function connectBedrockClient(username, acc, route) {
 
   client.on('error', (err) => {
     if (bots[username]?.bot !== client) return;
+    if (err && err.code === microsoftLogin.REJECTED) { msaLoginRejected(username, client, err); return; }
 
     // Server antwortet gar nicht -> sofort sauber neu einreihen (siehe bedrockServerUnreachable)
     if (!bedrockHasSpawned && /(Ping|Connect) timed out/i.test(String(err.message || ''))) {

@@ -1,5 +1,16 @@
 # Änderungen
 
+## Microsoft lehnt die Anmeldung ab (November 2026)
+
+- Lehnt Microsoft die Anmeldung nach der Code-Eingabe ab (z.B. „user interaction is required“ –
+  das Konto braucht eine Bestätigung bei Microsoft), merkt der Manager das jetzt **sofort**. Bisher
+  hat er 15 Minuten lang weiter nachgefragt (im Log: „device_code has already been used“), der
+  Account stand die ganze Zeit auf „Login nötig“ und bekam danach einfach einen neuen Code.
+- Jetzt: Status „Microsoft lehnt Login ab – Konto prüfen“, Erklärung im Chat, die Discord-Meldung
+  zeigt den Grund mit Start-Knopf. Der Login pausiert, bis man Start drückt.
+- Anfragen an Microsoft haben ein Zeitlimit; „slow_down“ wird beachtet.
+- Ein erzwungener Abbruch löst keinen zusätzlichen neuen Verbindungsversuch mehr aus.
+
 ## Login-Status nach eingegebenem Code (November 2026)
 
 - Nach erfolgreicher Microsoft-Anmeldung steht beim Account sofort „verbinde...“ statt weiter
