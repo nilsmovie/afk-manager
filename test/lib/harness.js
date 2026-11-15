@@ -162,6 +162,13 @@ class FakeJavaBot extends EventEmitter {
   }
   async clickWindow (slot, button, mode) {
     this.klicks.push([slot, button, mode])
+    const win = this.currentWindow
+    if (win && typeof win.acceptClick === 'function') {
+      // offenes Fenster: echte Klick-Logik von prismarine-windows (wie mineflayer)
+      win.acceptClick({ slot, mouseButton: button, mode, windowId: win.id, item: slot === -999 ? null : win.slots[slot] })
+      if (this.beimFensterKlick) await this.beimFensterKlick(slot, button, win)
+      return
+    }
     if (mode === 4) {
       const it = this.inventory.slots[slot]
       if (!it) return
@@ -184,6 +191,30 @@ class FakeJavaBot extends EventEmitter {
   }
 
   // ---- vom Test gesteuert ----
+  // Fenster wie vom Server geöffnet (z.B. nach einem Befehl): echtes prismarine-windows-Fenster.
+  // inhalt: { platz: [itemName, anzahl, { name, lore }] } - name/lore als Chat-JSON (wird zu NBT
+  // wie ab 1.20.3); unten im Fenster liegt das eigene Inventar (Plätze 9-44).
+  fensterOeffnen (type, title, inhalt = {}) {
+    const reg = this.registry
+    const windows = require(path.join(REPO, 'node_modules', 'prismarine-windows'))(reg)
+    const Item = require(path.join(REPO, 'node_modules', 'prismarine-item'))(reg)
+    this._fensterNr = (this._fensterNr || 0) + 1
+    const win = windows.createWindow(this._fensterNr, type, title === undefined ? '' : chatNbt(title))
+    for (const [slot, [name, count, extra]] of Object.entries(inhalt)) {
+      const it = new Item(reg.itemsByName[name].id, count || 1)
+      if (extra && extra.name) it.customName = chatNbt(extra.name)
+      if (extra && extra.lore) it.customLore = extra.lore.map(chatNbt)
+      win.updateSlot(Number(slot), it)
+    }
+    for (let i = 9; i <= 44; i++) {
+      const x = this.inventory.slots[i]
+      if (x) win.updateSlot(win.inventoryStart + i - 9, new Item(x.type, x.count))
+    }
+    this.currentWindow = win
+    this.emit('windowOpen', win)
+    return win
+  }
+
   einloggen () { this.drin = true; this.emit('login'); this.emit('spawn') }
   ressourcenpaket (state = 'play') { this._client.state = state; this.emit('resourcePack', 'https://pack.test/p.zip'); this._client.state = 'play' }
   spawn () { this.emit('spawn') }
@@ -196,6 +227,18 @@ class FakeJavaBot extends EventEmitter {
 }
 
 // ---------- Nachbau: Inventar ----------
+// Chat-JSON ({ text, color, extra }) oder Text -> NBT, wie der Server es ab 1.20.3 schickt
+function chatNbt (v) {
+  const nbt = require(path.join(REPO, 'node_modules', 'prismarine-nbt'))
+  const conv = (x) => {
+    if (typeof x === 'string') return nbt.string(x)
+    if (typeof x === 'boolean') return nbt.byte(x ? 1 : 0)
+    if (typeof x === 'number') return nbt.int(x)
+    if (Array.isArray(x)) return nbt.list(nbt.comp(x.map((y) => (typeof y === 'string' ? { text: nbt.string(y) } : Object.fromEntries(Object.entries(y).map(([k, w]) => [k, conv(w)]))))))
+    return nbt.comp(Object.fromEntries(Object.entries(x).map(([k, w]) => [k, conv(w)])))
+  }
+  return conv(v)
+}
 let registryCache = null
 function fakeRegistry () {
   if (!registryCache) registryCache = require(path.join(REPO, 'node_modules', 'prismarine-registry'))('1.21.4')

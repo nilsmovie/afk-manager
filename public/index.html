@@ -1054,6 +1054,28 @@
   .recipe-row .r-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .recipe-row .r-name small { color: var(--text-sub); }
 
+  /* Offenes Fenster: Kiste, Menü eines Plugins, Ofen ... */
+  .win-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+  .win-title { font-weight: 600; font-size: 14px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .win-close { flex: 0 0 auto; }
+  .win-close kbd { font: inherit; font-size: 10.5px; padding: 0 4px; margin-left: 4px; border: 1px solid var(--border-row); border-radius: 4px; opacity: 0.75; }
+  .win-note { font-size: 12px; color: var(--text-sub); margin: -2px 0 8px; }
+  .win-grid { display: grid; gap: 4px; margin: 0 auto; }
+  .win-proc { display: flex; align-items: center; justify-content: center; gap: 10px; flex-wrap: wrap; }
+  .win-proc .slot, .win-col .slot, .win-grid.fixed .slot { width: 44px; }
+  .win-grid.fixed { grid-template-columns: repeat(3, 44px); margin: 0; }
+  .win-col { display: flex; flex-direction: column; gap: 4px; align-items: center; }
+  .win-fire { font-size: 13px; opacity: 0.7; line-height: 1; }
+  .win-sep { font-size: 11.5px; color: var(--text-sub); margin: 12px 0 4px; }
+  .win-cursor { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 10px; font-size: 12.5px; }
+  .win-cursor:empty { display: none; }
+  .win-cursor .slot { width: 34px; flex: 0 0 34px; cursor: default; border-color: var(--accent-strong); }
+  .win-cursor .c-text { flex: 1 1 160px; min-width: 0; }
+  .win-hint { font-size: 11.5px; color: var(--text-sub); margin-top: 10px; }
+  .inv-detail .d-lore { display: flex; flex-direction: column; gap: 1px; margin: 3px 0 2px; color: var(--text-sub); }
+  .inv-detail .d-help { font-size: 11.5px; color: var(--text-sub); margin-top: 6px; }
+  .inv-detail .d-name small { font-weight: 400; color: var(--text-sub); }
+
   .cat-control-row {
     display: block;
   }
@@ -1329,6 +1351,21 @@
       </div>
       <div class="inv-status" id="invStatus">Account auswählen.</div>
       <div class="inv-body" id="invBody" hidden>
+        <div class="inv-window" id="invWindow" hidden>
+          <div class="win-head">
+            <div class="win-title" id="winTitle"></div>
+            <button class="small ghost win-close" id="winCloseBtn" title="Fenster schließen (Esc-Taste)">✕ Schließen <kbd>Esc</kbd></button>
+          </div>
+          <div class="win-note" id="winNote" hidden></div>
+          <div class="win-container" id="winContainer"></div>
+          <div class="win-sep">Inventar</div>
+          <div class="inv-main" id="winMain"></div>
+          <div class="inv-hotbar" id="winHotbar"></div>
+          <div class="win-cursor" id="winCursor"></div>
+          <div class="inv-detail" id="winDetail"></div>
+          <div class="win-hint">Mit der Maus: direkt links- oder rechtsklicken. Am Handy: Item antippen und dann auswählen.</div>
+        </div>
+        <div id="invNormal">
         <div class="inv-top">
           <div class="inv-equip" id="invEquip"></div>
           <div class="inv-mid">
@@ -1349,6 +1386,7 @@
             <input id="invRecipeFilter" placeholder="Rezept suchen..." hidden />
           </div>
           <div class="inv-recipes" id="invRecipes"></div>
+        </div>
         </div>
       </div>
     </div>
@@ -2705,6 +2743,22 @@ function itemSymbol(n) {
   return '▪️';
 }
 
+// Bild (oder Symbol), Anzahl und Haltbarkeit eines Items
+function slotInner(it) {
+  if (!it) return '';
+  const useImg = invData && invData.icons && !iconMissing.has(it.name);
+  let inner = useImg
+    ? `<img src="/item-icons/${encodeURIComponent(it.name)}" alt="" data-name="${escapeHtml(it.name)}" loading="lazy" onerror="invIconFail(this)" />`
+    : `<span class="sym">${itemSymbol(it.name)}</span>`;
+  if (it.count > 1) inner += `<span class="cnt">${escapeHtml(it.count)}</span>`;
+  if (it.durability && it.durability.left < it.durability.max) {
+    const pct = Math.max(0, Math.min(100, Math.round((it.durability.left / it.durability.max) * 100)));
+    const hue = Math.round(pct * 1.2);
+    inner += `<span class="dur"><i style="width:${pct}%;background:hsl(${hue},85%,50%)"></i></span>`;
+  }
+  return inner;
+}
+
 function slotHtml(it, slot) {
   const cls = ['slot'];
   if (invSelected === slot) cls.push('selected');
@@ -2712,16 +2766,7 @@ function slotHtml(it, slot) {
   if (it && it.enchants && it.enchants.length) cls.push('ench');
   let inner = '';
   if (it) {
-    const useImg = invData && invData.icons && !iconMissing.has(it.name);
-    inner = useImg
-      ? `<img src="/item-icons/${encodeURIComponent(it.name)}" alt="" data-name="${escapeHtml(it.name)}" loading="lazy" onerror="invIconFail(this)" />`
-      : `<span class="sym">${itemSymbol(it.name)}</span>`;
-    if (it.count > 1) inner += `<span class="cnt">${escapeHtml(it.count)}</span>`;
-    if (it.durability && it.durability.left < it.durability.max) {
-      const pct = Math.max(0, Math.min(100, Math.round((it.durability.left / it.durability.max) * 100)));
-      const hue = Math.round(pct * 1.2);
-      inner += `<span class="dur"><i style="width:${pct}%;background:hsl(${hue},85%,50%)"></i></span>`;
-    }
+    inner = slotInner(it);
   } else if (EQUIP_PLACEHOLDER[slot]) {
     inner = `<span class="ph">${EQUIP_PLACEHOLDER[slot]}</span>`;
   }
@@ -2742,6 +2787,15 @@ function invIconFail(img) {
 
 function renderInventory() {
   if (!invData) return;
+  const win = invData.window;
+  document.getElementById('invWindow').hidden = !win;
+  document.getElementById('invNormal').hidden = !!win;
+  if (win) renderWindow(win);
+  else renderInvSlots();
+  renderVehicleHint();
+}
+
+function renderInvSlots() {
   const s = invData.slots;
   document.getElementById('invEquip').innerHTML = [5, 6, 7, 8, 45].map((i) => slotHtml(s[i], i)).join('');
   document.getElementById('invCraftGrid').innerHTML = [1, 2, 3, 4].map((i) => slotHtml(s[i], i)).join('');
@@ -2764,7 +2818,10 @@ function renderInventory() {
   }
   document.getElementById('invStats').innerHTML = statsHtml;
   renderInvDetail();
-  // Hinweis in der Bewegung
+}
+
+// Hinweis in der Bewegung
+function renderVehicleHint() {
   if (invData.inBoat) {
     vehicleHint.hidden = false;
     vehicleHint.textContent = '🛶 Im Boot: W/S fahren, A/D lenken – „Absteigen“ zum Aussteigen';
@@ -2890,6 +2947,220 @@ invBody.addEventListener('dragend', () => {
   invBody.querySelectorAll('.drop-target').forEach((x) => x.classList.remove('drop-target'));
 });
 
+// ---------- Offenes Fenster (Kiste, Menü eines Plugins, Ofen ...) ----------
+// Wie im Spiel: oben der Inhalt, darunter das eigene Inventar. Mit der Maus wird direkt
+// links/rechts geklickt, am Handy wählt man erst das Item und dann den Klick.
+const WIN_LABEL = {
+  generic_9x1: 'Kiste', generic_9x2: 'Kiste', generic_9x3: 'Kiste', generic_9x4: 'Kiste', generic_9x5: 'Kiste', generic_9x6: 'Große Kiste',
+  generic_3x3: 'Werfer', crafter_3x3: 'Werkzeugmaschine', shulker_box: 'Shulker-Kiste', hopper: 'Trichter', crafting: 'Werkbank',
+  furnace: 'Ofen', blast_furnace: 'Schmelzofen', smoker: 'Räucherofen', anvil: 'Amboss', grindstone: 'Schleifstein',
+  merchant: 'Handel', cartography: 'Kartentisch', smithing: 'Schmiedetisch', stonecutter: 'Steinsäge', loom: 'Webstuhl',
+  enchantment: 'Zaubertisch', brewing_stand: 'Braustand', beacon: 'Leuchtfeuer', lectern: 'Lesepult',
+};
+// Was im Dashboard nicht geht (braucht eigene Knöpfe im Spiel)
+const WIN_LIMITS = {
+  anvil: 'Umbenennen', merchant: 'Handel auswählen', enchantment: 'Verzauberung auswählen', stonecutter: 'Rezept auswählen',
+  loom: 'Muster auswählen', beacon: 'Effekt auswählen', lectern: 'Umblättern',
+};
+const WIN_PROCESS = new Set(['anvil', 'grindstone', 'merchant', 'cartography', 'smithing', 'stonecutter', 'loom']);
+// Zeichen aus eigenen Schriften eines Ressourcenpakets (eigene Menü-Grafiken) - hier nicht darstellbar
+const PUA_RE = /[\uE000-\uF8FF\u{F0000}-\u{FFFFD}\u{100000}-\u{10FFFD}]/gu;
+const PUA_ONE = /[\uE000-\uF8FF\u{F0000}-\u{FFFFD}\u{100000}-\u{10FFFD}]/u;
+const stripPua = (v) => String(v ?? '').replace(PUA_RE, '');
+let winSelected = null; // Platz, für den unten Links/Rechts/Abbrechen steht (Touch)
+let winHover = null; // Platz unter der Maus (nur Anzeige)
+let winPointer = 'mouse';
+let winShownId = null;
+
+function winType(w) { return String(w.type || '').replace(/^minecraft:/, ''); }
+function lineHtml(line) {
+  if (!line) return '';
+  const segs = Array.isArray(line.segs) ? line.segs.map((x) => ({ ...x, t: stripPua(x.t) })).filter((x) => x.t) : null;
+  return chatTextHtml({ text: stripPua(line.text), segs });
+}
+function winItemName(it) {
+  return it.custom ? stripPua(it.custom).trim() || it.label : it.label;
+}
+function winTooltip(it) {
+  if (!it) return '';
+  const lines = [`${winItemName(it)}${it.count > 1 ? ` (${it.count})` : ''}`];
+  if (it.custom) lines.push(`(${it.label})`);
+  for (const e of it.enchants || []) lines.push(e.label || e.name);
+  for (const l of it.lore || []) lines.push(stripPua(l.text));
+  return lines.join('\n');
+}
+function winSlotHtml(w, slot) {
+  const it = w.slots[slot] || null;
+  const cls = ['slot'];
+  if (winSelected === slot) cls.push('selected');
+  if (it && it.enchants && it.enchants.length) cls.push('ench');
+  return `<div class="${cls.join(' ')}" data-wslot="${slot}" draggable="false" title="${escapeHtml(winTooltip(it))}">${slotInner(it)}</div>`;
+}
+function winRange(a, b) {
+  const out = [];
+  for (let i = a; i < b; i++) out.push(i);
+  return out;
+}
+function winContainerHtml(w, type, n) {
+  const cell = (i) => (i < n ? winSlotHtml(w, i) : '');
+  const grid = (idx, cols) => `<div class="win-grid" style="grid-template-columns:repeat(${cols},minmax(0,1fr));width:${Math.round((cols / 9) * 1000) / 10}%">${idx.map(cell).join('')}</div>`;
+  const arrow = '<span class="inv-arrow">→</span>';
+  if (type === 'crafting' && n >= 10) {
+    return `<div class="win-proc"><div class="win-grid fixed">${winRange(1, 10).map(cell).join('')}</div>${arrow}${cell(0)}</div>`;
+  }
+  if (type === 'crafter_3x3' && n >= 10) {
+    return `<div class="win-proc"><div class="win-grid fixed">${winRange(0, 9).map(cell).join('')}</div>${arrow}${cell(9)}</div>`;
+  }
+  if (/^(furnace|blast_furnace|smoker)$/.test(type) && n >= 3) {
+    return `<div class="win-proc"><div class="win-col">${cell(0)}<span class="win-fire">🔥</span>${cell(1)}</div>${arrow}${cell(2)}</div>`;
+  }
+  if (WIN_PROCESS.has(type) && n >= 2) {
+    return `<div class="win-proc">${winRange(0, n - 1).map(cell).join('<span class="inv-arrow">+</span>')}${arrow}${cell(n - 1)}</div>`;
+  }
+  if (type === 'hopper') return grid(winRange(0, n), 5);
+  if (type === 'generic_3x3' && n === 9) return `<div class="win-proc"><div class="win-grid fixed">${winRange(0, 9).map(cell).join('')}</div></div>`;
+  if (n >= 9 && n % 9 === 0) return grid(winRange(0, n), 9);
+  if (n > 0 && n <= 6) return `<div class="win-proc">${winRange(0, n).map(cell).join('')}</div>`;
+  return grid(winRange(0, n), 9);
+}
+
+function renderWindow(w) {
+  if (winShownId !== w.id) {
+    // anderes Fenster (z.B. nächste Seite im Menü)
+    winShownId = w.id;
+    winSelected = null;
+    winHover = null;
+  }
+  const type = winType(w);
+  const n = Math.max(0, Math.min(w.slots.length, Number(w.inventoryStart) || 0));
+  const titleText = String((w.title && w.title.text) || '');
+  const title = lineHtml(w.title);
+  document.getElementById('winTitle').innerHTML = stripPua(titleText).trim() ? title : escapeHtml(WIN_LABEL[type] || 'Fenster');
+  const notes = [];
+  if (PUA_ONE.test(titleText)) notes.push('Dieses Menü hat ein eigenes Aussehen vom Server – hier siehst du nur die Items.');
+  if (WIN_LIMITS[type]) notes.push(`Hier gehen nur Klicks auf die Plätze – ${WIN_LIMITS[type]} geht nur im Spiel.`);
+  const noteEl = document.getElementById('winNote');
+  noteEl.hidden = notes.length === 0;
+  noteEl.textContent = notes.join(' ');
+  document.getElementById('winContainer').innerHTML = winContainerHtml(w, type, n);
+  // eigenes Inventar: 27 Plätze, dann die Schnellleiste
+  let main = '';
+  for (let i = n; i < n + 27 && i < w.slots.length; i++) main += winSlotHtml(w, i);
+  document.getElementById('winMain').innerHTML = main;
+  let hot = '';
+  for (let i = n + 27; i < n + 36 && i < w.slots.length; i++) hot += winSlotHtml(w, i);
+  document.getElementById('winHotbar').innerHTML = hot;
+  const c = w.cursor;
+  document.getElementById('winCursor').innerHTML = c
+    ? `<span class="slot">${slotInner(c)}</span><span class="c-text">Auf der Maus: <b>${escapeHtml(c.count)}× ${c.custom && c.customSegs ? lineHtml({ text: c.custom, segs: c.customSegs }) : escapeHtml(winItemName(c))}</b> – auf einen Platz klicken, um es abzulegen</span><button class="small ghost" onclick="winDropCursor()">Wegwerfen</button>`
+    : '';
+  renderWinDetail();
+}
+
+function renderWinDetail() {
+  const el = document.getElementById('winDetail');
+  const w = invData && invData.window;
+  const slot = winSelected !== null ? winSelected : winHover;
+  if (!w || slot === null || slot >= w.slots.length) { el.innerHTML = ''; return; }
+  const it = w.slots[slot] || null;
+  const withButtons = winSelected !== null;
+  if (!it && !withButtons) { el.innerHTML = ''; return; }
+  let html = '';
+  if (it) {
+    const name = it.custom ? (it.customSegs ? lineHtml({ text: it.custom, segs: it.customSegs }) : escapeHtml(winItemName(it))) : escapeHtml(it.label);
+    html += `<div class="d-name">${name}${it.custom ? ` <small>(${escapeHtml(it.label)})</small>` : ''}${it.count > 1 ? ` <small>· ${escapeHtml(it.count)} Stück</small>` : ''}</div>`;
+    if (it.enchants && it.enchants.length) html += `<div class="d-ench">${it.enchants.map((e) => `<span class="${/curse/.test(e.name) ? 'curse' : ''}">${escapeHtml(e.label || e.name)}</span>`).join('')}</div>`;
+    const lore = (it.lore || []).map((l) => lineHtml(l)).filter((x) => x.trim());
+    if (lore.length) html += `<div class="d-lore">${lore.map((x) => `<span>${x}</span>`).join('')}</div>`;
+  } else {
+    html += '<div class="d-name">Leerer Platz</div>';
+  }
+  if (withButtons) {
+    const cur = w.cursor;
+    let help;
+    if (cur && !it) help = 'Linksklick legt den ganzen Stapel ab, Rechtsklick nur eins.';
+    else if (cur) help = 'Linksklick: tauschen oder dazulegen · Rechtsklick: eins dazulegen.';
+    else help = 'Linksklick: nehmen bzw. im Menü auswählen · Rechtsklick: halben Stapel nehmen.';
+    html += `<div class="d-actions">
+      <button class="small" onclick="winClick(${Number(slot)}, 0)">Linksklick</button>
+      <button class="small" onclick="winClick(${Number(slot)}, 1)">Rechtsklick</button>
+      <button class="small ghost" onclick="winSelect(null)">Abbrechen</button>
+    </div><div class="d-help">${help}</div>`;
+  }
+  el.innerHTML = html;
+}
+
+function winSelect(slot) {
+  winSelected = slot;
+  if (invData && invData.window) renderWindow(invData.window);
+}
+
+async function winClick(slot, button) {
+  const w = invData && invData.window;
+  if (!w) return;
+  winSelected = null;
+  winHover = null;
+  await invPost('/window-click', { windowId: w.id, slot, button });
+  // Der Server antwortet oft kurz danach (neue Menüseite, Fenster zu) -> nochmal nachsehen
+  setTimeout(() => loadInventory(true), 450);
+}
+async function winDropCursor() {
+  const c = invData && invData.window && invData.window.cursor;
+  if (!c) return;
+  const ok = await showConfirm(`${c.count} × ${winItemName(c)} wegwerfen?`, { title: 'Item wegwerfen', okLabel: 'Wegwerfen', danger: true });
+  if (ok) winClick(-999, 0);
+}
+async function winClose() {
+  winSelected = null;
+  winHover = null;
+  await invPost('/window-close', {});
+}
+document.getElementById('winCloseBtn').addEventListener('click', winClose);
+
+(() => {
+  const box = document.getElementById('invWindow');
+  const slotOf = (e) => {
+    const el = e.target.closest('.slot[data-wslot]');
+    return el && box.contains(el) ? Number(el.dataset.wslot) : null;
+  };
+  box.addEventListener('pointerdown', (e) => { winPointer = e.pointerType || 'mouse'; });
+  box.addEventListener('click', (e) => {
+    const slot = slotOf(e);
+    if (slot === null || !invData || !invData.window) return;
+    const pt = typeof e.pointerType === 'string' && e.pointerType ? e.pointerType : winPointer;
+    if (pt === 'mouse') winClick(slot, 0);
+    else winSelect(winSelected === slot ? null : slot);
+  });
+  box.addEventListener('contextmenu', (e) => {
+    const slot = slotOf(e);
+    if (slot === null || !invData || !invData.window) return;
+    e.preventDefault();
+    if (winPointer === 'mouse') winClick(slot, 1);
+    else winSelect(slot); // langes Drücken am Handy
+  });
+  box.addEventListener('mouseover', (e) => {
+    if (winPointer !== 'mouse' || winSelected !== null) return;
+    const slot = slotOf(e);
+    if (slot !== null && slot !== winHover) { winHover = slot; renderWinDetail(); }
+  });
+  box.addEventListener('mouseleave', () => {
+    if (winHover === null) return;
+    winHover = null;
+    renderWinDetail();
+  });
+})();
+
+// Esc schließt das Fenster (wie im Spiel) - nicht beim Tippen und nicht, wenn ein Dialog offen ist
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape' || e.defaultPrevented || !invData || !invData.window) return;
+  if (msgOverlay.classList.contains('open')) return;
+  const t = e.target;
+  if (t && (/^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName) || t.isContentEditable)) return;
+  if (!document.getElementById('invCard').getClientRects().length) return;
+  e.preventDefault();
+  winClose();
+});
+
 async function loadInventory(force = false) {
   clearTimeout(invTimer);
   const key = invAccountSelect.value;
@@ -2899,7 +3170,7 @@ async function loadInventory(force = false) {
     vehicleHint.hidden = true;
     return;
   }
-  let delay = 1500;
+  let delay = invData && invData.window ? 1000 : 1500;
   if (document.visibilityState === 'visible' && (!invBusy || force)) {
     try {
       const res = await fetch('/api/inventory/' + encodeURIComponent(key));
@@ -2917,8 +3188,9 @@ async function loadInventory(force = false) {
       } else if (text !== invRaw) {
         invRaw = text;
         invData = JSON.parse(text);
-        if (invSelected !== null && !invData.slots[invSelected]) invSelected = null;
-        invStatus.textContent = invData.windowOpen ? 'Gerade ist ein Fenster (z.B. eine Kiste) offen – eine Aktion schließt es.' : '';
+        if (invSelected !== null && (!invData.slots[invSelected] || invData.window)) invSelected = null;
+        if (!invData.window) winShownId = null;
+        invStatus.textContent = '';
         invBody.hidden = false;
         renderInventory();
       }

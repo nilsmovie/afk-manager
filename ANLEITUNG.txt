@@ -196,6 +196,15 @@ Gut zu wissen:
    Essen/Tränken gibt es "Essen"/"Trinken" (geht nur mit Hunger, goldene Äpfel,
    Tränke und Milch immer). "Rechtsklick" in der Bewegung gedrückt halten
    benutzt das Item wie im Spiel (Essen, Bogen, Schild), Loslassen beendet es.
+ - Fenster und Menüs: Geht im Spiel ein Fenster auf (Kiste, Ofen, oder ein
+   Menü nach einem Befehl wie /warp), zeigt das Inventar-Widget genau dieses
+   Fenster - oben der Inhalt (Titel und Item-Namen in Farbe, Beschreibung
+   beim Drüberfahren bzw. Antippen), darunter das eigene Inventar.
+   Mit der Maus: Linksklick und Rechtsklick direkt wie im Spiel.
+   Am Handy: Item antippen, dann unten "Linksklick", "Rechtsklick" oder
+   "Abbrechen". "Schließen" bzw. die Esc-Taste schließt das Fenster.
+   Eigene Menü-Grafiken aus Ressourcenpaketen gehen nicht - dort sieht man
+   nur die Items. Klicks stehen im Protokoll.
  - Echte Item-Bilder und deutsche Namen (einmalig, im Ordner afk-manager):
       npm run bilder
    Lädt die Bilder direkt von Mojang (mit Bestätigung der Minecraft-EULA) in

@@ -232,8 +232,28 @@ function clearIconCache() {
 }
 
 // Eigener Name (Amboss) als reiner Text
+// NBT-Form ({ type, value }, ab 1.20.3 fuer Namen/Titel) in normales JSON umwandeln
+function unNbt(v, depth = 0) {
+  if (!v || typeof v !== 'object' || depth > 12) return v;
+  if (typeof v.type === 'string' && 'value' in v) {
+    if (v.type === 'compound') {
+      const out = {};
+      for (const k of Object.keys(v.value || {})) out[k] = unNbt(v.value[k], depth + 1);
+      return out;
+    }
+    if (v.type === 'list') {
+      const inner = v.value || {};
+      return (Array.isArray(inner.value) ? inner.value : []).map((x) => unNbt(inner.type === 'compound' ? { type: 'compound', value: x } : x, depth + 1));
+    }
+    return v.value;
+  }
+  return v;
+}
+
 function plainChat(v, depth = 0) {
   if (v === null || v === undefined || depth > 8) return '';
+  if (depth === 0 && typeof v === 'object' && typeof v.type === 'string' && 'value' in v) v = unNbt(v);
+  if (v === null || v === undefined) return '';
   if (typeof v === 'string') {
     const s = v.trim();
     if ((s.startsWith('{') || s.startsWith('[') || s.startsWith('"')) && depth === 0) {
@@ -302,10 +322,33 @@ function isConsumable(name, registry) {
   return !!(registry && registry.foodsByName && registry.foodsByName[name]);
 }
 
-function itemInfo(item, slot, registry) {
+// Eine Zeile Chat-Text (Name, Beschreibung) als { text, segs? } - mit Farben, wenn fmt da ist
+function chatLine(raw, fmt, max) {
+  let r = null;
+  try { r = fmt ? fmt(raw) : null; } catch (e) { r = null; }
+  if (!r || typeof r.text !== 'string') r = { text: plainChat(raw) };
+  r.text = r.text.replace(/\u00a7./g, '').slice(0, max);
+  return r;
+}
+
+const MAX_LORE_LINES = 12;
+function readLore(item, fmt) {
+  let lore = null;
+  try { lore = item.customLore; } catch (e) { lore = null; }
+  if (!Array.isArray(lore) || !lore.length) return undefined;
+  const out = [];
+  for (const line of lore.slice(0, MAX_LORE_LINES)) out.push(chatLine(line, fmt, 100));
+  return out;
+}
+
+function itemInfo(item, slot, registry, fmt) {
   if (!item) return null;
   let custom = '';
-  try { custom = plainChat(item.customName).slice(0, 64); } catch (e) { custom = ''; }
+  let customLine = null;
+  if (item.customName !== null && item.customName !== undefined) {
+    customLine = chatLine(item.customName, fmt, 64);
+    custom = customLine.text;
+  }
   let enchants = [];
   try {
     enchants = readEnchants(item, registry);
@@ -317,6 +360,8 @@ function itemInfo(item, slot, registry) {
     name: String(item.name || ''),
     label: germanName(item.name) || String(item.displayName || item.name || ''),
     custom: custom || undefined,
+    customSegs: custom && customLine && customLine.segs ? customLine.segs : undefined,
+    lore: readLore(item, fmt),
     count: Number(item.count) || 0,
     stackSize: Number(item.stackSize) || 64,
     enchants,
@@ -333,15 +378,38 @@ function itemInfo(item, slot, registry) {
   return info;
 }
 
-function inventorySnapshot(bot) {
+// Offenes Fenster (Kiste, Menue eines Plugins, Ofen ...) wie im Spiel: oben der Inhalt des
+// Fensters, darunter das eigene Inventar - alles mit den Platznummern DIESES Fensters.
+// formatTitle(raw) macht aus dem Titel { text, segs } (Farben wie im Chat).
+const MAX_WINDOW_SLOTS = 120;
+function windowSnapshot(bot, formatTitle) {
+  const win = bot.currentWindow;
+  if (!win || !Array.isArray(win.slots)) return null;
+  const slots = [];
+  const n = Math.min(win.slots.length, MAX_WINDOW_SLOTS);
+  for (let i = 0; i < n; i++) slots.push(itemInfo(win.slots[i], i, bot.registry, formatTitle));
+  const title = chatLine(win.title, formatTitle, 120);
+  return {
+    id: win.id,
+    type: String(win.type || ''),
+    title,
+    inventoryStart: Number(win.inventoryStart) || 0,
+    inventoryEnd: Number(win.inventoryEnd) || n,
+    slots,
+    cursor: itemInfo(win.selectedItem, -1, bot.registry, formatTitle),
+  };
+}
+
+function inventorySnapshot(bot, opts = {}) {
   const slots = [];
   const src = (bot.inventory && bot.inventory.slots) || [];
-  for (let i = 0; i < SLOT_COUNT; i++) slots.push(itemInfo(src[i], i, bot.registry));
+  for (let i = 0; i < SLOT_COUNT; i++) slots.push(itemInfo(src[i], i, bot.registry, opts.formatTitle));
   const v = bot.vehicle;
   return {
     slots,
     quickBar: typeof bot.quickBarSlot === 'number' ? bot.quickBarSlot : 0,
     windowOpen: !!bot.currentWindow,
+    window: windowSnapshot(bot, opts.formatTitle),
     vehicle: v && v.name ? String(v.name) : null,
     inBoat: isBoatEntity(v),
     health: typeof bot.health === 'number' ? Math.round(bot.health * 10) / 10 : null,
@@ -477,6 +545,32 @@ function craftableList(bot) {
   return { table: !!table, items: out };
 }
 
+// Klick in einem offenen Fenster (button 0 = links, 1 = rechts; slot -999 = ausserhalb)
+async function windowClick(bot, windowId, slot, button, fmt) {
+  return runExclusive(bot, async () => {
+    const win = bot.currentWindow;
+    if (!win) throw new Error('Es ist kein Fenster mehr offen');
+    if (win.id !== windowId) throw new Error('Das Fenster hat sich inzwischen geändert – bitte nochmal');
+    const end = Math.min(win.slots.length, Number(win.inventoryEnd) || win.slots.length);
+    if (slot !== -999 && !(slot >= 0 && slot < end)) throw new Error('Ungültiger Platz');
+    if (slot === -999 && !win.selectedItem) throw new Error('Du hast gerade nichts auf der Maus');
+    const before = itemInfo(slot === -999 ? win.selectedItem : win.slots[slot], slot, bot.registry, fmt);
+    try {
+      await bot.clickWindow(slot, button, 0);
+    } catch (e) {
+      // Fehler aus mineflayer (englisch) verstaendlich machen
+      throw new Error(`Der Klick ging nicht durch (${String(e && e.message ? e.message : e).slice(0, 80)})`);
+    }
+    return { ok: true, item: before };
+  }, 8000);
+}
+
+function windowClose(bot) {
+  if (!bot.currentWindow) return { ok: true, wasOpen: false };
+  bot.closeWindow(bot.currentWindow);
+  return { ok: true, wasOpen: true };
+}
+
 async function craftItem(bot, itemId, times) {
   return runExclusive(bot, async () => {
     await ensureInventoryWindow(bot);
@@ -499,6 +593,8 @@ module.exports = {
   dropItem,
   holdHotbar,
   eatItem,
+  windowClick,
+  windowClose,
   readEnchants,
   craftableList,
   craftItem,
