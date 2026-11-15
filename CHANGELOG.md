@@ -1,5 +1,12 @@
 # Änderungen
 
+## Tier auswählen (November 2026)
+
+- Im Widget „Katzenpause“ kann man jetzt per Auswahl das Tier wechseln: **Katze, Hund, Fuchs,
+  Hase, Panda, Pinguin oder Axolotl**. Es ändert sich das Tier im Widget (mit eigener Überschrift
+  und eigenen Sprüchen) und das Tier, das unten hin und her läuft (der Hase hoppelt, der Pinguin
+  watschelt). Die Auswahl merkt sich der Browser.
+
 ## Item-Bilder für alle Items (November 2026)
 
 - **Bilder auch für Items ohne eigenes Bild**: `npm run bilder` liest jetzt die Modelle aus dem
