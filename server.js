@@ -8,6 +8,7 @@ const { Server } = require('socket.io');
 const mineflayer = require('mineflayer');
 const crypto = require('crypto');
 const net = require('net');
+const ingame = require('./ingame');
 const v8 = require('v8');
 const { promisify } = require('util');
 const { monitorEventLoopDelay } = require('perf_hooks');
@@ -1541,6 +1542,7 @@ function forceKillBot(username) {
     clearTimeout(state.msaTimer);
     state.msaTimer = null;
   }
+  if (state && state.boat) state.boat.stop();
   if (state && state.bot) {
     const oldBot = state.bot;
     try {
@@ -2646,6 +2648,8 @@ function startBot(username) {
     // Dimensionswechsel (Nether/End/Overworld) - /hide soll aber nur einmal pro echtem
     // Reconnect kommen, nicht bei jedem Dimensionswechsel.
     hasSpawnedThisConnection: false,
+    // Boot fahren (Steuerung): rechnet die Bootsfahrt wie das Spiel und meldet die Position
+    boat: ingame.createBoatDriver(bot, (m) => console.log(`[${username}] ${m}`)),
   };
   broadcastAccountList();
 
@@ -2806,6 +2810,7 @@ function startBot(username) {
   });
 
   bot.on('end', () => {
+    if (bots[username] && bots[username].bot === bot && bots[username].boat) bots[username].boat.stop();
     if (bots[username]?.bot !== bot) return; // schon durch Stop/Watchdog abgeloest - ignorieren
     const state = bots[username];
     const wasManualStop = state ? state.manualStop : false;
@@ -4211,6 +4216,11 @@ app.post('/api/control/:username/move', requireAccountAccess, (req, res) => {
     return res.status(400).json({ error: 'Account ist nicht online' });
   }
   try {
+    // Sitzt der Account im Boot, faehrt das Boot (W/S) bzw. lenkt (A/D)
+    if (botState.boat && botState.boat.inBoat() && ['forward', 'back', 'left', 'right'].includes(direction)) {
+      botState.boat.setInput(direction, !!pressed);
+      return res.json({ ok: true, boat: true });
+    }
     botState.bot.setControlState(direction, !!pressed);
     res.json({ ok: true });
   } catch (e) {
@@ -4248,15 +4258,115 @@ app.post('/api/control/:username/drop', requireAccountAccess, (req, res) => {
   if (!heldItem) {
     return res.status(400).json({ error: 'Kein Item in der Hand' });
   }
-  const cb = (err) => {
-    if (err) return res.status(500).json({ error: err.message });
+  // mineflayer 4 arbeitet mit Promises (ein Callback wurde hier frueher nie aufgerufen)
+  const done = all ? bot.tossStack(heldItem) : bot.toss(heldItem.type, heldItem.metadata, 1);
+  Promise.resolve(done).then(() => {
+    auditWeb(req, 'Item gedroppt', username, `${all ? heldItem.count : 1}× ${ingame.germanName(heldItem.name) || heldItem.displayName}`);
     res.json({ ok: true });
-  };
-  if (all) {
-    bot.tossStack(heldItem, cb);
-  } else {
-    bot.toss(heldItem.type, heldItem.metadata, 1, cb);
+  }, (err) => res.status(500).json({ error: err.message }));
+});
+
+// ---------- Inventar (gleiche Rechte wie die Steuerung) ----------
+// Liefert den Bot einer Java-Verbindung, die online ist - sonst schickt es die Fehlermeldung
+function javaBotFor(req, res) {
+  const key = req.params.username;
+  if (isBedrockAccount(connUser(key))) {
+    res.status(400).json({ error: 'Bei Bedrock-Accounts gibt es (noch) keine Inventar-Ansicht' });
+    return null;
   }
+  const st = bots[key];
+  if (!st || !st.bot || st.status !== 'online' || !st.bot.inventory) {
+    res.status(400).json({ error: 'Account ist nicht online' });
+    return null;
+  }
+  return st.bot;
+}
+const slotNum = (v) => (typeof v === 'number' || (typeof v === 'string' && /^\d{1,2}$/.test(v)) ? Number(v) : NaN);
+
+app.get('/api/inventory/:username', requireAccountAccess, (req, res) => {
+  const bot = javaBotFor(req, res);
+  if (!bot) return;
+  try {
+    res.json(ingame.inventorySnapshot(bot));
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/inventory/:username/move', requireAccountAccess, async (req, res) => {
+  const bot = javaBotFor(req, res);
+  if (!bot) return;
+  const from = slotNum((req.body || {}).from);
+  const to = slotNum((req.body || {}).to);
+  if (!ingame.validSlot(from, { allowResult: true }) || !ingame.validSlot(to) || from === to) {
+    return res.status(400).json({ error: 'Ungültiger Platz' });
+  }
+  try {
+    res.json(await ingame.moveItem(bot, from, to));
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+app.post('/api/inventory/:username/drop', requireAccountAccess, async (req, res) => {
+  const bot = javaBotFor(req, res);
+  if (!bot) return;
+  const slot = slotNum((req.body || {}).slot);
+  if (!ingame.validSlot(slot)) return res.status(400).json({ error: 'Ungültiger Platz' });
+  try {
+    const r = await ingame.dropItem(bot, slot, !!(req.body || {}).all);
+    auditWeb(req, 'Item gedroppt', req.params.username, `${r.count}× ${r.item.label}${r.item.custom ? ` „${r.item.custom}“` : ''}`);
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+app.post('/api/inventory/:username/hold', requireAccountAccess, (req, res) => {
+  const bot = javaBotFor(req, res);
+  if (!bot) return;
+  const slot = slotNum((req.body || {}).slot);
+  if (!Number.isInteger(slot) || slot < 36 || slot > 44) return res.status(400).json({ error: 'Nur Plätze der Schnellleiste' });
+  try {
+    res.json(ingame.holdHotbar(bot, slot));
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+app.get('/api/inventory/:username/recipes', requireAccountAccess, (req, res) => {
+  const bot = javaBotFor(req, res);
+  if (!bot) return;
+  try {
+    res.json(ingame.craftableList(bot));
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/inventory/:username/craft', requireAccountAccess, async (req, res) => {
+  const bot = javaBotFor(req, res);
+  if (!bot) return;
+  const itemId = Number((req.body || {}).item);
+  const times = Number((req.body || {}).times);
+  if (!Number.isInteger(itemId) || itemId < 0 || !bot.registry.items[itemId]) return res.status(400).json({ error: 'Unbekanntes Item' });
+  if (!Number.isInteger(times) || times < 1 || times > 64) return res.status(400).json({ error: 'Anzahl 1 bis 64' });
+  try {
+    const r = await ingame.craftItem(bot, itemId, times);
+    auditWeb(req, 'Gecraftet', req.params.username, `${r.count}× ${r.name}`);
+    res.json(r);
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+// Item-Bilder aus dem eigenen Spiel (npm run bilder) - nur fuer Angemeldete, nur Namen a-z0-9_
+app.get('/item-icons/:name', (req, res) => {
+  const name = String(req.params.name || '').replace(/\.png$/, '');
+  const file = ingame.iconFile(name);
+  if (!file) return res.status(404).end();
+  res.set('Cache-Control', 'private, max-age=86400');
+  res.sendFile(file);
 });
 
 const MOUNTABLE_ANIMAL_NAMES = ['horse', 'donkey', 'mule', 'pig', 'strider', 'llama', 'camel'];
@@ -4353,6 +4463,7 @@ app.post('/api/control/:username/dismount', requireAccountAccess, (req, res) => 
   }
   try {
     if (botState.bot.vehicle) {
+      if (botState.boat) { botState.boat.release(); botState.boat.stop(); }
       botState.bot.dismount();
     }
     res.json({ ok: true });

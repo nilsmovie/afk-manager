@@ -55,7 +55,7 @@ if (PHASE === 1) {
   if (szenario.accounts) fs.writeFileSync(path.join(lauf, 'accounts.json'), JSON.stringify(szenario.accounts, null, 2))
   for (const [name, inhalt] of Object.entries(szenario.dateien || {})) {
     fs.mkdirSync(path.dirname(path.join(lauf, name)), { recursive: true })
-    fs.writeFileSync(path.join(lauf, name), typeof inhalt === 'string' ? inhalt : JSON.stringify(inhalt, null, 2))
+    fs.writeFileSync(path.join(lauf, name), typeof inhalt === 'string' || Buffer.isBuffer(inhalt) ? inhalt : JSON.stringify(inhalt, null, 2))
   }
 }
 // Login-Cache nur im Testordner (deleteAuthCacheFiles & Co. duerfen nie echte Dateien sehen)
@@ -109,6 +109,20 @@ class FakeJavaBot extends EventEmitter {
     this.steuerung = []
     this._client = new EventEmitter()
     this._client.state = 'play'
+    // Inventar, Welt und Fahrzeug fuer die Steuerungs-Tests
+    this.registry = fakeRegistry()
+    this.inventory = new FakeInventory(this.registry)
+    this.quickBarSlot = 0
+    this.currentWindow = null
+    this.health = 20
+    this.food = 18
+    this.vehicle = null
+    this.welt = () => null // (x, y, z) -> { name, boundingBox } oder null
+    this.werkbank = false
+    this.vehicleEingaben = []
+    if (!FAKE_REZEPTE.length) fakeRezepte()
+    this.rezepte = FAKE_REZEPTE
+    this.klicks = []
     this._client.write = (name, params) => this.geschrieben.push([name, params])
     this.paketeAngenommen = 0
     this._client.end = () => this.quit()
@@ -119,11 +133,46 @@ class FakeJavaBot extends EventEmitter {
   end () { this.quit() }
   setControlState (k, v) { this.steuerung.push([k, v]) }
   clearControlStates () {}
-  setQuickBarSlot (s) { this.steuerung.push(['hotbar', s]) }
+  setQuickBarSlot (s) { this.steuerung.push(['hotbar', s]); this.quickBarSlot = s }
   dismount () { this.steuerung.push(['dismount']) }
   mount () { this.steuerung.push(['mount']) }
   attack () { this.steuerung.push(['attack']) }
   acceptResourcePack () { this.paketeAngenommen++ }
+  blockAt (v) { return this.welt(Math.floor(v.x), Math.floor(v.y), Math.floor(v.z)) }
+  moveVehicle (left, forward) { this.vehicleEingaben.push([left, forward]) }
+  closeWindow () { this.currentWindow = null }
+  async moveSlotItem (a, b) {
+    const s = this.inventory.slots
+    const x = s[a]; const y = s[b]
+    if (x && y && x.name === y.name && y.count < y.stackSize) {
+      const n = Math.min(x.count, y.stackSize - y.count)
+      y.count += n; x.count -= n
+      if (x.count === 0) s[a] = null
+    } else { s[a] = y || null; s[b] = x || null }
+    for (const i of [a, b]) if (s[i]) s[i].slot = i
+  }
+  async clickWindow (slot, button, mode) {
+    this.klicks.push([slot, button, mode])
+    if (mode === 4) {
+      const it = this.inventory.slots[slot]
+      if (!it) return
+      if (button === 1 || it.count === 1) this.inventory.slots[slot] = null
+      else it.count--
+    }
+  }
+  findBlock (opts) { return this.werkbank ? { name: 'crafting_table', position: { x: 1, y: 64, z: 1 } } : null }
+  recipesFor (id, meta, min, table) {
+    return this.rezepte.filter((r) => r.result.id === id && (!r.requiresTable || table) && r.delta.every((d) => d.count >= 0 || this.inventory.count(d.id) >= -d.count))
+  }
+  async craft (recipe, n, table) {
+    if (recipe.requiresTable && !table) throw new Error('requires table')
+    for (let k = 0; k < n; k++) {
+      for (const d of recipe.delta) {
+        if (d.count < 0) this.inventory.nehmen(d.id, -d.count)
+        else this.inventory.geben(d.id, d.count)
+      }
+    }
+  }
 
   // ---- vom Test gesteuert ----
   einloggen () { this.drin = true; this.emit('login'); this.emit('spawn') }
@@ -135,6 +184,51 @@ class FakeJavaBot extends EventEmitter {
   // json: optional der Aufbau der Nachricht wie im Spiel ({ text, color, extra: [...] }) fuer Farben
   chatEmpfangen (text, json) { this.emit('message', { toString: () => text, ...(json || {}) }) }
   code (data = {}) { this.opts.onMsaCode({ user_code: 'TESTCODE', verification_uri: 'https://www.microsoft.com/link', expires_in: 900, message: 'Code', ...data }) }
+}
+
+// ---------- Nachbau: Inventar ----------
+let registryCache = null
+function fakeRegistry () {
+  if (!registryCache) registryCache = require(path.join(REPO, 'node_modules', 'prismarine-registry'))('1.21.4')
+  return registryCache
+}
+function fakeItem (reg, name, count = 1, extra = {}) {
+  const d = reg.itemsByName[name]
+  return { type: d.id, name, displayName: d.displayName, count, stackSize: d.stackSize, maxDurability: d.maxDurability, durabilityUsed: 0, enchants: [], customName: null, ...extra }
+}
+class FakeInventory {
+  constructor (reg) { this.reg = reg; this.slots = new Array(46).fill(null) }
+  setzen (slot, name, count, extra) { this.slots[slot] = name ? { ...fakeItem(this.reg, name, count, extra), slot } : null }
+  count (id) { return this.slots.filter((x, i) => x && x.type === id && i >= 9).reduce((a, x) => a + x.count, 0) }
+  nehmen (id, n) {
+    for (let i = 9; i < 46 && n > 0; i++) {
+      const x = this.slots[i]
+      if (!x || x.type !== id) continue
+      const k = Math.min(n, x.count); x.count -= k; n -= k
+      if (x.count === 0) this.slots[i] = null
+    }
+  }
+  geben (id, n) {
+    const name = this.reg.items[id].name
+    for (let i = 9; i < 45 && n > 0; i++) {
+      const x = this.slots[i]
+      if (x && x.type === id && x.count < x.stackSize) { const k = Math.min(n, x.stackSize - x.count); x.count += k; n -= k }
+    }
+    for (let i = 9; i < 45 && n > 0; i++) {
+      if (!this.slots[i]) { const k = Math.min(n, 64); this.setzen(i, name, k); n -= k }
+    }
+  }
+}
+// Kleine Rezeptliste: Holz -> Bretter (2x2), Bretter -> Werkbank (2x2), Bretter -> Kiste (Werkbank)
+let FAKE_REZEPTE = []
+function fakeRezepte () {
+  const r = fakeRegistry()
+  const id = (n) => r.itemsByName[n].id
+  FAKE_REZEPTE = [
+    { result: { id: id('oak_planks'), count: 4 }, delta: [{ id: id('oak_log'), count: -1 }, { id: id('oak_planks'), count: 4 }], requiresTable: false },
+    { result: { id: id('crafting_table'), count: 1 }, delta: [{ id: id('oak_planks'), count: -4 }, { id: id('crafting_table'), count: 1 }], requiresTable: false },
+    { result: { id: id('chest'), count: 1 }, delta: [{ id: id('oak_planks'), count: -8 }, { id: id('chest'), count: 1 }], requiresTable: true },
+  ]
 }
 
 // ---------- Nachbau: Bedrock (Thread-Client, bedrock-protocol, nethernet-http) ----------

@@ -969,16 +969,87 @@
     justify-content: center;
     margin-bottom: 14px;
   }
-  .hotbar-row {
-    display: grid;
-    grid-template-columns: repeat(9, 1fr);
-    gap: 4px;
-  }
-  .hotbar-btn {
-    padding: 8px 0;
+  .vehicle-hint {
     font-size: 12px;
+    color: var(--text-sub);
+    background: color-mix(in srgb, var(--accent) 8%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent) 25%, transparent);
+    border-radius: 8px;
+    padding: 6px 10px;
+    margin: -4px 0 12px;
     text-align: center;
   }
+
+  /* ---------- Inventar ---------- */
+  .inv-header { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+  .inv-account-select { width: auto; max-width: 220px; margin-bottom: 0; }
+  .inv-status { font-size: 12.5px; color: var(--text-sub); margin-bottom: 8px; }
+  .inv-status:empty { display: none; }
+  .inv-body { max-width: 460px; margin: 0 auto; }
+  .inv-top { display: flex; align-items: flex-end; justify-content: space-between; flex-wrap: wrap; gap: 10px; margin-bottom: 10px; }
+  @media (max-width: 480px) {
+    .inv-equip { grid-template-columns: repeat(5, 34px); }
+    .inv-grid2 { grid-template-columns: repeat(2, 34px); }
+    .inv-equip .slot, .inv-grid2 .slot, #invCraftResult .slot { width: 34px; }
+    .inv-mid { order: 3; flex-basis: 100%; }
+    .slot .sym { font-size: 15px; }
+  }
+  .inv-equip { display: grid; grid-template-columns: repeat(5, 40px); gap: 4px; }
+  .inv-mid { flex: 1; min-width: 0; display: flex; justify-content: center; }
+  .inv-stats { font-size: 12px; color: var(--text-sub); display: flex; flex-direction: column; gap: 2px; align-items: center; }
+  .inv-craftgrid { display: flex; align-items: center; gap: 6px; }
+  .inv-grid2 { display: grid; grid-template-columns: repeat(2, 40px); gap: 4px; }
+  .inv-arrow { color: var(--text-sub); font-size: 15px; }
+  .inv-main, .inv-hotbar { display: grid; grid-template-columns: repeat(9, minmax(0, 1fr)); gap: 4px; }
+  .inv-hotbar { margin-top: 8px; }
+  .slot {
+    position: relative;
+    aspect-ratio: 1 / 1;
+    min-width: 0;
+    background: color-mix(in srgb, var(--text-main) 6%, transparent);
+    border: 1px solid var(--border-row);
+    border-radius: 7px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    user-select: none;
+    -webkit-user-select: none;
+    transition: border-color 0.12s, background 0.12s;
+  }
+  .inv-equip .slot, .inv-grid2 .slot, #invCraftResult .slot { width: 40px; }
+  .slot:hover { border-color: color-mix(in srgb, var(--accent) 55%, transparent); }
+  .slot.selected { border-color: var(--accent-strong); background: color-mix(in srgb, var(--accent) 22%, transparent); }
+  .slot.held { box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--accent-strong) 70%, transparent); }
+  .slot.drop-target { border-color: var(--accent-strong); border-style: dashed; }
+  .slot img { width: 72%; height: 72%; image-rendering: pixelated; pointer-events: none; }
+  .slot .sym { font-size: 18px; line-height: 1; pointer-events: none; }
+  .slot .ph { font-size: 15px; opacity: 0.28; pointer-events: none; filter: grayscale(1); }
+  .slot .cnt {
+    position: absolute; right: 3px; bottom: 1px; font-size: 11px; font-weight: 700;
+    color: #fff; text-shadow: 1px 1px 0 #000, -1px 1px 0 #000, 1px -1px 0 #000, -1px -1px 0 #000;
+    pointer-events: none;
+  }
+  .slot .dur { position: absolute; left: 4px; right: 4px; bottom: 3px; height: 3px; background: rgba(0, 0, 0, 0.5); border-radius: 2px; pointer-events: none; }
+  .slot .dur i { display: block; height: 100%; border-radius: 2px; }
+  .slot.ench::after {
+    content: ''; position: absolute; inset: 0; border-radius: 7px; pointer-events: none;
+    background: linear-gradient(120deg, transparent 30%, rgba(190, 120, 255, 0.28) 50%, transparent 70%);
+  }
+  .inv-detail { margin-top: 10px; font-size: 12.5px; }
+  .inv-detail:empty { display: none; }
+  .inv-detail .d-name { font-weight: 600; }
+  .inv-detail .d-sub { color: var(--text-sub); margin: 2px 0 8px; }
+  .inv-detail .d-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+  .inv-craft { margin-top: 14px; border-top: 1px solid var(--border-row); padding-top: 10px; }
+  .inv-craft-head { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .inv-craft-head input { flex: 1 1 140px; margin: 0; }
+  .inv-recipes { margin-top: 8px; display: flex; flex-direction: column; gap: 4px; max-height: 260px; overflow-y: auto; }
+  .inv-recipes .r-note { font-size: 12px; color: var(--text-sub); }
+  .recipe-row { display: flex; align-items: center; gap: 8px; padding: 4px 6px; border: 1px solid var(--border-row); border-radius: 8px; font-size: 12.5px; }
+  .recipe-row .slot { width: 32px; flex: 0 0 32px; cursor: default; }
+  .recipe-row .r-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .recipe-row .r-name small { color: var(--text-sub); }
 
   .cat-control-row {
     display: block;
@@ -1183,8 +1254,9 @@
 
     <div class="cat-control-row">
       <div class="card">
-        <h2>Steuerung</h2>
-        <select id="controlAccountSelect" class="control-account-select"></select>
+        <h2>Bewegung</h2>
+        <select id="controlAccountSelect" class="control-account-select" title="Welcher Account? (gilt auch fürs Inventar)"></select>
+        <div class="vehicle-hint" id="vehicleHint" hidden></div>
 
         <div class="control-grid">
           <div></div>
@@ -1203,11 +1275,7 @@
           <button class="small ghost" id="ctrlDismount">Absteigen</button>
           <button class="small" id="ctrlLeftclick">Linksklick</button>
           <button class="small" id="ctrlRightclick">Rechtsklick</button>
-          <button class="small ghost" id="ctrlDrop">Drop</button>
-          <button class="small ghost" id="ctrlDropAll">Drop Stack</button>
         </div>
-
-        <div class="hotbar-row" id="hotbarRow"></div>
       </div>
 
       <div class="card cat-card">
@@ -1248,6 +1316,37 @@
           </svg>
         </div>
         <div class="sub" style="text-align:center; margin-top:6px;">Klick mich</div>
+      </div>
+    </div>
+
+    <div class="card" id="invCard">
+      <div class="inv-header">
+        <h2 style="margin:0;">Inventar</h2>
+        <select id="invAccountSelect" class="inv-account-select" title="Welcher Account? (gilt auch für die Bewegung)"></select>
+      </div>
+      <div class="inv-status" id="invStatus">Account auswählen.</div>
+      <div class="inv-body" id="invBody" hidden>
+        <div class="inv-top">
+          <div class="inv-equip" id="invEquip"></div>
+          <div class="inv-mid">
+            <div class="inv-stats" id="invStats"></div>
+          </div>
+          <div class="inv-craftgrid">
+            <div class="inv-grid2" id="invCraftGrid"></div>
+            <span class="inv-arrow">→</span>
+            <div id="invCraftResult"></div>
+          </div>
+        </div>
+        <div class="inv-main" id="invMain"></div>
+        <div class="inv-hotbar" id="invHotbar"></div>
+        <div class="inv-detail" id="invDetail"></div>
+        <div class="inv-craft">
+          <div class="inv-craft-head">
+            <button class="small ghost" id="invRecipesBtn">Rezepte anzeigen</button>
+            <input id="invRecipeFilter" placeholder="Rezept suchen..." hidden />
+          </div>
+          <div class="inv-recipes" id="invRecipes"></div>
+        </div>
       </div>
     </div>
   </div>
@@ -2173,6 +2272,7 @@ function renderAccounts(accounts) {
   if (Array.from(controlAccountSelect.options).some((o) => o.value === previousControlSelection)) {
     controlAccountSelect.value = previousControlSelection;
   }
+  syncInvAccountSelect();
   openAutoChatPanels.forEach((username) => {
     const el = document.getElementById('autochat-' + username);
     if (el) el.style.display = 'block';
@@ -2529,36 +2629,325 @@ document.getElementById('ctrlRightclick').addEventListener('click', async () => 
   await fetch('/api/control/' + encodeURIComponent(username) + '/rightclick', { method: 'POST' });
 });
 
-async function sendDrop(all) {
-  const username = getControlUsername();
-  if (!username) return;
-  const res = await fetch('/api/control/' + encodeURIComponent(username) + '/drop', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ all }),
-  });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) showMessage(data.error || 'Fehler beim Droppen');
-}
-document.getElementById('ctrlDrop').addEventListener('click', () => sendDrop(false));
-document.getElementById('ctrlDropAll').addEventListener('click', () => sendDrop(true));
+// ---------- Inventar ----------
+// Plaetze wie im Spiel: 0 Ergebnis, 1-4 Handwerk 2x2, 5-8 Ruestung, 9-35 Inventar,
+// 36-44 Schnellleiste, 45 Zweithand
+const invAccountSelect = document.getElementById('invAccountSelect');
+const invStatus = document.getElementById('invStatus');
+const invBody = document.getElementById('invBody');
+const invDetail = document.getElementById('invDetail');
+const invRecipesEl = document.getElementById('invRecipes');
+const invRecipeFilter = document.getElementById('invRecipeFilter');
+const vehicleHint = document.getElementById('vehicleHint');
+let invData = null;
+let invRaw = '';
+let invSelected = null;
+let invDragFrom = null;
+let invTimer = null;
+let invBusy = false;
+let invRecipes = null;
+const iconMissing = new Set();
+const EQUIP_PLACEHOLDER = { 5: '🪖', 6: '👕', 7: '👖', 8: '🥾', 45: '🛡️' };
+const EQUIP_LABEL = { 5: 'Kopf', 6: 'Brust', 7: 'Beine', 8: 'Füße', 45: 'Zweithand' };
 
-const hotbarRow = document.getElementById('hotbarRow');
-for (let i = 0; i < 9; i++) {
-  const btn = document.createElement('button');
-  btn.className = 'small ghost hotbar-btn';
-  btn.textContent = String(i + 1);
-  btn.addEventListener('click', async () => {
-    const username = getControlUsername();
-    if (!username) return;
-    await fetch('/api/control/' + encodeURIComponent(username) + '/hotbar', {
+// Eigenes Symbol, wenn es kein echtes Bild gibt
+function itemSymbol(n) {
+  const rules = [
+    [/netherite_sword|_sword$/, '🗡️'], [/_pickaxe$/, '⛏️'], [/_axe$/, '🪓'], [/_shovel$|_hoe$/, '🔨'],
+    [/^bow$|crossbow/, '🏹'], [/trident/, '🔱'], [/^shield$/, '🛡️'], [/_helmet$|turtle_helmet/, '🪖'],
+    [/_chestplate$/, '👕'], [/_leggings$/, '👖'], [/_boots$/, '🥾'], [/elytra/, '🪽'], [/fishing_rod/, '🎣'],
+    [/potion/, '🧪'], [/experience_bottle/, '✨'], [/glass_bottle|honey_bottle/, '🍶'], [/enchanted_book/, '📘'],
+    [/book/, '📕'], [/map$/, '🗺️'], [/compass/, '🧭'], [/clock/, '🕰️'], [/bucket/, '🪣'], [/golden_apple/, '🍏'],
+    [/apple/, '🍎'], [/bread/, '🍞'], [/carrot/, '🥕'], [/potato/, '🥔'], [/beef|porkchop|mutton|chicken|rabbit/, '🍖'],
+    [/cod|salmon|fish/, '🐟'], [/cookie/, '🍪'], [/cake|pie/, '🎂'], [/melon/, '🍉'], [/sweet_berries|glow_berries/, '🍒'],
+    [/diamond/, '💎'], [/emerald/, '💚'], [/netherite/, '🟫'], [/gold/, '🟨'], [/iron/, '⬜'], [/copper/, '🟧'],
+    [/coal|charcoal/, '⚫'], [/redstone/, '🔴'], [/lapis/, '🔵'], [/quartz|amethyst/, '🔮'], [/egg/, '🥚'],
+    [/arrow/, '➶'], [/torch|lantern|candle/, '🕯️'], [/_bed$/, '🛏️'], [/boat|raft/, '🛶'], [/minecart/, '🛒'],
+    [/string/, '🧵'], [/feather/, '🪶'], [/bone/, '🦴'], [/gunpowder|tnt/, '🧨'], [/ender_pearl|ender_eye/, '🧿'],
+    [/totem/, '🗿'], [/shulker_box|chest|barrel/, '📦'], [/firework/, '🎆'], [/sapling|leaves|vine|grass|fern/, '🌱'],
+    [/flower|tulip|rose|poppy|dandelion|orchid|daisy|lilac|peony|allium/, '🌸'], [/seeds|wheat|hay/, '🌾'],
+    [/log|wood|planks|stick|stem|hyphae/, '🪵'], [/glass/, '🪟'], [/wool|carpet/, '🧶'], [/brick|terracotta|concrete/, '🧱'],
+    [/door|trapdoor|gate/, '🚪'], [/sign/, '🪧'], [/rail/, '🛤️'], [/music_disc/, '💿'], [/dye/, '🎨'],
+    [/spawn_egg/, '🥚'], [/slime|honey/, '🟩'], [/snowball|snow|ice/, '❄️'], [/water|lava/, '💧'],
+  ];
+  for (const [re, sym] of rules) if (re.test(n)) return sym;
+  return '▪️';
+}
+
+function slotHtml(it, slot) {
+  const cls = ['slot'];
+  if (invSelected === slot) cls.push('selected');
+  if (invData && slot === 36 + invData.quickBar) cls.push('held');
+  if (it && it.enchants && it.enchants.length) cls.push('ench');
+  let inner = '';
+  if (it) {
+    const useImg = invData && invData.icons && !iconMissing.has(it.name);
+    inner = useImg
+      ? `<img src="/item-icons/${encodeURIComponent(it.name)}" alt="" data-name="${escapeHtml(it.name)}" loading="lazy" onerror="invIconFail(this)" />`
+      : `<span class="sym">${itemSymbol(it.name)}</span>`;
+    if (it.count > 1) inner += `<span class="cnt">${escapeHtml(it.count)}</span>`;
+    if (it.durability && it.durability.left < it.durability.max) {
+      const pct = Math.max(0, Math.min(100, Math.round((it.durability.left / it.durability.max) * 100)));
+      const hue = Math.round(pct * 1.2);
+      inner += `<span class="dur"><i style="width:${pct}%;background:hsl(${hue},85%,50%)"></i></span>`;
+    }
+  } else if (EQUIP_PLACEHOLDER[slot]) {
+    inner = `<span class="ph">${EQUIP_PLACEHOLDER[slot]}</span>`;
+  }
+  const title = it
+    ? `${it.custom ? `„${it.custom}“ – ` : ''}${it.label}${it.count > 1 ? ` (${it.count})` : ''}`
+    : (EQUIP_LABEL[slot] || '');
+  return `<div class="${cls.join(' ')}" data-slot="${slot}" draggable="${it ? 'true' : 'false'}" title="${escapeHtml(title)}">${inner}</div>`;
+}
+
+// Kein Bild fuer dieses Item -> eigenes Symbol (und nicht nochmal nachfragen)
+function invIconFail(img) {
+  const name = img.dataset.name || '';
+  iconMissing.add(name);
+  img.replaceWith(Object.assign(document.createElement('span'), { className: 'sym', textContent: itemSymbol(name) }));
+}
+
+function renderInventory() {
+  if (!invData) return;
+  const s = invData.slots;
+  document.getElementById('invEquip').innerHTML = [5, 6, 7, 8, 45].map((i) => slotHtml(s[i], i)).join('');
+  document.getElementById('invCraftGrid').innerHTML = [1, 2, 3, 4].map((i) => slotHtml(s[i], i)).join('');
+  document.getElementById('invCraftResult').innerHTML = slotHtml(s[0], 0);
+  let main = '';
+  for (let i = 9; i <= 35; i++) main += slotHtml(s[i], i);
+  document.getElementById('invMain').innerHTML = main;
+  let hot = '';
+  for (let i = 36; i <= 44; i++) hot += slotHtml(s[i], i);
+  document.getElementById('invHotbar').innerHTML = hot;
+  const stats = [];
+  if (invData.health !== null) stats.push(`❤️ ${escapeHtml(invData.health)} / 20`);
+  if (invData.food !== null) stats.push(`🍗 ${escapeHtml(invData.food)} / 20`);
+  document.getElementById('invStats').innerHTML = stats.map((x) => `<span>${x}</span>`).join('');
+  renderInvDetail();
+  // Hinweis in der Bewegung
+  if (invData.inBoat) {
+    vehicleHint.hidden = false;
+    vehicleHint.textContent = '🛶 Im Boot: W/S fahren, A/D lenken – „Absteigen“ zum Aussteigen';
+  } else if (invData.vehicle) {
+    vehicleHint.hidden = false;
+    vehicleHint.textContent = `Sitzt auf: ${invData.vehicle} – lenken geht nur im Boot`;
+  } else {
+    vehicleHint.hidden = true;
+  }
+}
+
+function renderInvDetail() {
+  const it = invSelected !== null && invData ? invData.slots[invSelected] : null;
+  if (!it) { invDetail.innerHTML = ''; return; }
+  const sub = [];
+  if (it.count > 1) sub.push(`${it.count} Stück`);
+  if (it.durability) sub.push(`Haltbarkeit ${it.durability.left} / ${it.durability.max}`);
+  if (it.enchants && it.enchants.length) sub.push(it.enchants.map((e) => `${e.name.replace(/_/g, ' ')} ${e.lvl}`).join(', '));
+  const isHot = invSelected >= 36 && invSelected <= 44;
+  const actions = [];
+  if (isHot && invSelected !== 36 + invData.quickBar) actions.push(`<button class="small" onclick="invHold(${invSelected})">In die Hand</button>`);
+  if (invSelected !== 0) {
+    actions.push(`<button class="small ghost" onclick="invDrop(${invSelected}, false)">1 droppen</button>`);
+    if (it.count > 1) actions.push(`<button class="small ghost stop" onclick="invDrop(${invSelected}, true)">Alle ${escapeHtml(it.count)} droppen</button>`);
+  }
+  actions.push(`<button class="small ghost" onclick="invSelect(null)">Abwählen</button>`);
+  invDetail.innerHTML = `
+    <div class="d-name">${it.custom ? `„${escapeHtml(it.custom)}“ – ` : ''}${escapeHtml(it.label)}</div>
+    <div class="d-sub">${escapeHtml(sub.join(' · ') || ' ')}${invSelected === 0 ? ' · Ergebnis: auf einen Platz klicken, um es zu nehmen' : ' · Zum Verschieben auf einen anderen Platz klicken oder ziehen'}</div>
+    <div class="d-actions">${actions.join('')}</div>`;
+}
+
+function invSelect(slot) {
+  invSelected = slot;
+  if (invData) renderInventory();
+}
+
+async function invPost(path, body) {
+  const key = invAccountSelect.value;
+  if (!key) return null;
+  invBusy = true;
+  try {
+    const res = await fetch('/api/inventory/' + encodeURIComponent(key) + path, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ slot: i }),
+      body: JSON.stringify(body || {}),
     });
-  });
-  hotbarRow.appendChild(btn);
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) { showMessage(data.error || 'Das hat nicht geklappt'); return null; }
+    return data;
+  } finally {
+    invBusy = false;
+    loadInventory(true);
+  }
 }
+async function invMove(from, to) {
+  invSelected = null;
+  await invPost('/move', { from, to });
+}
+async function invDrop(slot, all) {
+  const it = invData && invData.slots[slot];
+  if (!it) return;
+  if (all || it.enchants.length || it.custom) {
+    const ok = await showConfirm(`${all ? `Alle ${it.count}` : '1'} × ${it.label}${it.custom ? ` „${it.custom}“` : ''} droppen?`, { title: 'Item droppen', okLabel: 'Droppen', danger: true });
+    if (!ok) return;
+  }
+  invSelected = null;
+  await invPost('/drop', { slot, all });
+}
+async function invHold(slot) {
+  await invPost('/hold', { slot });
+}
+
+invBody.addEventListener('click', (e) => {
+  const el = e.target.closest('.slot[data-slot]');
+  if (!el || !invData || invBusy) return;
+  const slot = Number(el.dataset.slot);
+  if (!(slot >= 0)) return; // Bild in der Rezeptliste
+  if (invSelected === null) {
+    if (invData.slots[slot]) invSelect(slot);
+  } else if (invSelected === slot) {
+    invSelect(null);
+  } else if (slot !== 0) {
+    invMove(invSelected, slot);
+  }
+});
+invBody.addEventListener('dragstart', (e) => {
+  const el = e.target.closest('.slot[data-slot]');
+  if (!el || !(Number(el.dataset.slot) >= 0)) return;
+  invDragFrom = Number(el.dataset.slot);
+  e.dataTransfer.effectAllowed = 'move';
+  try { e.dataTransfer.setData('text/plain', String(invDragFrom)); } catch (err) { /* egal */ }
+});
+invBody.addEventListener('dragover', (e) => {
+  const el = e.target.closest('.slot[data-slot]');
+  if (!el || invDragFrom === null || !(Number(el.dataset.slot) > 0)) return;
+  e.preventDefault();
+  invBody.querySelectorAll('.drop-target').forEach((x) => x.classList.remove('drop-target'));
+  el.classList.add('drop-target');
+});
+invBody.addEventListener('drop', (e) => {
+  const el = e.target.closest('.slot[data-slot]');
+  e.preventDefault();
+  const from = invDragFrom;
+  invDragFrom = null;
+  if (!el || from === null) return;
+  const to = Number(el.dataset.slot);
+  if (to !== from && to > 0) invMove(from, to);
+});
+invBody.addEventListener('dragend', () => {
+  invDragFrom = null;
+  invBody.querySelectorAll('.drop-target').forEach((x) => x.classList.remove('drop-target'));
+});
+
+async function loadInventory(force = false) {
+  clearTimeout(invTimer);
+  const key = invAccountSelect.value;
+  if (!key) {
+    invBody.hidden = true;
+    invStatus.textContent = 'Kein Java-Account vorhanden.';
+    vehicleHint.hidden = true;
+    return;
+  }
+  let delay = 1500;
+  if (document.visibilityState === 'visible' && (!invBusy || force)) {
+    try {
+      const res = await fetch('/api/inventory/' + encodeURIComponent(key));
+      const text = await res.text();
+      if (invAccountSelect.value !== key) return; // inzwischen anderer Account
+      if (!res.ok) {
+        let msg = 'Inventar nicht verfügbar';
+        try { msg = JSON.parse(text).error || msg; } catch (e) { /* egal */ }
+        invStatus.textContent = msg;
+        invBody.hidden = true;
+        invData = null;
+        invRaw = '';
+        vehicleHint.hidden = true;
+        delay = 4000;
+      } else if (text !== invRaw) {
+        invRaw = text;
+        invData = JSON.parse(text);
+        if (invSelected !== null && !invData.slots[invSelected]) invSelected = null;
+        invStatus.textContent = invData.windowOpen ? 'Gerade ist ein Fenster (z.B. eine Kiste) offen – eine Aktion schließt es.' : '';
+        invBody.hidden = false;
+        renderInventory();
+      }
+    } catch (e) {
+      delay = 4000;
+    }
+  }
+  invTimer = setTimeout(loadInventory, delay);
+}
+
+// Beide Auswahlfelder (Bewegung und Inventar) zeigen immer denselben Account
+function syncInvAccountSelect() {
+  const want = Array.from(controlAccountSelect.options).map((o) => `${o.value}|${o.textContent}`).join(',');
+  if (invAccountSelect.dataset.items !== want) {
+    invAccountSelect.innerHTML = controlAccountSelect.innerHTML;
+    invAccountSelect.dataset.items = want;
+  }
+  if (invAccountSelect.value !== controlAccountSelect.value) invAccountSelect.value = controlAccountSelect.value;
+  if (invAccountSelect.value !== invLoadedKey) accountChangedForInventory();
+}
+let invLoadedKey = null;
+function accountChangedForInventory() {
+  invLoadedKey = invAccountSelect.value;
+  invSelected = null;
+  invRaw = '';
+  invData = null;
+  invRecipes = null;
+  invRecipesEl.innerHTML = '';
+  invRecipeFilter.hidden = true;
+  document.getElementById('invRecipesBtn').textContent = 'Rezepte anzeigen';
+  invStatus.textContent = 'Lade Inventar…';
+  invBody.hidden = true;
+  loadInventory(true);
+}
+controlAccountSelect.addEventListener('change', () => {
+  invAccountSelect.value = controlAccountSelect.value;
+  accountChangedForInventory();
+});
+invAccountSelect.addEventListener('change', () => {
+  controlAccountSelect.value = invAccountSelect.value;
+  accountChangedForInventory();
+});
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') loadInventory(true); });
+
+// ---------- Craften ----------
+function renderRecipes() {
+  if (!invRecipes) return;
+  const term = invRecipeFilter.value.trim().toLowerCase();
+  const list = invRecipes.items.filter((r) => !term || r.label.toLowerCase().includes(term) || r.name.includes(term));
+  const note = invRecipes.table
+    ? '<div class="r-note">Werkbank in Reichweite – auch 3x3-Rezepte.</div>'
+    : '<div class="r-note">Keine Werkbank in Reichweite – nur Rezepte, die im Inventar (2x2) gehen.</div>';
+  invRecipesEl.innerHTML = note + (list.length
+    ? list.map((r) => `
+      <div class="recipe-row">
+        ${slotHtml({ name: r.name, label: r.label, count: r.perCraft, enchants: [] }, -1).replace('draggable="true"', 'draggable="false"')}
+        <span class="r-name" title="${escapeHtml(r.label)}">${escapeHtml(r.label)} <small>(${escapeHtml(r.perCraft)} pro Mal, bis ${escapeHtml(r.maxTimes)}×)</small></span>
+        <button class="small" onclick="invCraft(${Number(r.id)}, 1)">1×</button>
+        ${r.maxTimes > 1 ? `<button class="small ghost" onclick="invCraft(${Number(r.id)}, ${Number(r.maxTimes)})">${escapeHtml(r.maxTimes)}×</button>` : ''}
+      </div>`).join('')
+    : '<div class="r-note">Mit diesem Inventar lässt sich gerade nichts craften.</div>');
+}
+async function loadRecipes() {
+  const key = invAccountSelect.value;
+  if (!key) return;
+  invRecipesEl.innerHTML = '<div class="r-note">Suche Rezepte…</div>';
+  const res = await fetch('/api/inventory/' + encodeURIComponent(key) + '/recipes');
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) { invRecipesEl.innerHTML = `<div class="r-note">${escapeHtml(data.error || 'Fehler')}</div>`; return; }
+  invRecipes = data;
+  invRecipeFilter.hidden = false;
+  document.getElementById('invRecipesBtn').textContent = 'Rezepte aktualisieren';
+  renderRecipes();
+}
+async function invCraft(item, times) {
+  const r = await invPost('/craft', { item, times });
+  if (r) loadRecipes();
+}
+document.getElementById('invRecipesBtn').addEventListener('click', loadRecipes);
+invRecipeFilter.addEventListener('input', renderRecipes);
 </script>
 </body>
 </html>
