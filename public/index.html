@@ -2304,11 +2304,65 @@ function addChatLine(msg) {
   chatlogEl.scrollTop = chatlogEl.scrollHeight;
 }
 
+// ---------- Chat-Farben wie in Minecraft ----------
+// Farben kommen vom Server als #RRGGBB. Damit alles lesbar bleibt (z.B. Weiss/Gelb im hellen
+// Farbschema, Schwarz/Dunkelblau in den dunklen), wird eine Farbe nur so weit aufgehellt bzw.
+// abgedunkelt, bis sie sich genug vom Hintergrund des Chats abhebt.
+const chatColorCache = new Map();
+let chatBgRgb = null;
+function hexToRgb(h) { return [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16)); }
+function relLum(rgb) {
+  const [r, g, b] = rgb.map((v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; });
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+function contrastOf(a, b) {
+  const la = relLum(a); const lb = relLum(b);
+  return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);
+}
+function currentChatBg() {
+  if (!chatBgRgb) {
+    const m = getComputedStyle(chatlogEl).backgroundColor.match(/\d+(\.\d+)?/g);
+    chatBgRgb = m && m.length >= 3 ? m.slice(0, 3).map(Number) : [11, 12, 17];
+  }
+  return chatBgRgb;
+}
+function readableChatColor(hex) {
+  if (chatColorCache.has(hex)) return chatColorCache.get(hex);
+  const bg = currentChatBg();
+  const target = relLum(bg) < 0.4 ? [255, 255, 255] : [0, 0, 0];
+  let rgb = hexToRgb(hex);
+  for (let i = 0; i < 12 && contrastOf(rgb, bg) < 3.2; i++) {
+    rgb = rgb.map((v, k) => Math.round(v + (target[k] - v) * 0.18));
+  }
+  const out = `rgb(${rgb.join(',')})`;
+  chatColorCache.set(hex, out);
+  return out;
+}
+function chatTextHtml(msg) {
+  if (!Array.isArray(msg.segs) || msg.segs.length === 0) return escapeHtml(msg.text);
+  return msg.segs.map((x) => {
+    const css = [];
+    if (typeof x.c === 'string' && /^#[0-9A-Fa-f]{6}$/.test(x.c)) css.push(`color:${readableChatColor(x.c.toUpperCase())}`);
+    if (x.b) css.push('font-weight:700');
+    if (x.i) css.push('font-style:italic');
+    const deco = [x.u ? 'underline' : '', x.s ? 'line-through' : ''].filter(Boolean).join(' ');
+    if (deco) css.push(`text-decoration:${deco}`);
+    const t = escapeHtml(x.t);
+    return css.length ? `<span style="${css.join(';')}">${t}</span>` : t;
+  }).join('');
+}
+// Farbschema gewechselt -> Farben neu an den Hintergrund anpassen
+document.getElementById('themeSelect').addEventListener('change', () => {
+  chatBgRgb = null;
+  chatColorCache.clear();
+  if (chatActive) redrawChatLog();
+});
+
 function appendChatLine(msg) {
   const line = document.createElement('div');
   line.className = 'chat-line';
   const time = new Date(msg.ts).toLocaleTimeString();
-  line.innerHTML = `<span class="chat-user">[${time}]</span> ${escapeHtml(msg.text)}`;
+  line.innerHTML = `<span class="chat-user">[${time}]</span> ${chatTextHtml(msg)}`;
   chatlogEl.appendChild(line);
 }
 

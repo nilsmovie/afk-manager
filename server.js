@@ -2418,7 +2418,141 @@ function broadcastAccountList() {
   checkAllOnlineMessages();
 }
 
-function logChat(username, text) {
+// ---------- Chat-Farben ----------
+// Minecraft-Chat als farbige Stuecke fuer das Dashboard: [{ t: Text, c: '#RRGGBB', b, i, u, s }].
+// Die Nachricht wird als Baum durchlaufen wie im Spiel: ein Teil erbt Farbe und Format von
+// seinem Eltern-Teil (nicht vom Nachbarn), Uebersetzungen ("<%s> %s") werden mit der Sprache
+// des Bots aufgeloest. §-Codes, die Plugins direkt in den Text schreiben (auch Hex als §#RRGGBB
+// oder §x§R§R§G§G§B§B), gelten bis zum Ende dieses Textteils. Es kommen nur geprueft harmlose
+// Werte heraus (Farbe nur als #RRGGBB, der Text wird im Browser escaped).
+const MC_COLOR_CODES = {
+  0: '#000000', 1: '#0000AA', 2: '#00AA00', 3: '#00AAAA', 4: '#AA0000', 5: '#AA00AA', 6: '#FFAA00', 7: '#AAAAAA',
+  8: '#555555', 9: '#5555FF', a: '#55FF55', b: '#55FFFF', c: '#FF5555', d: '#FF55FF', e: '#FFFF55', f: '#FFFFFF',
+};
+const MC_COLOR_NAMES = {
+  black: '#000000', dark_blue: '#0000AA', dark_green: '#00AA00', dark_aqua: '#00AAAA', dark_red: '#AA0000',
+  dark_purple: '#AA00AA', gold: '#FFAA00', gray: '#AAAAAA', dark_gray: '#555555', blue: '#5555FF',
+  green: '#55FF55', aqua: '#55FFFF', red: '#FF5555', light_purple: '#FF55FF', yellow: '#FFFF55', white: '#FFFFFF',
+};
+const CHAT_SEGMENTS_MAX = 200;
+const CHAT_TEXT_MAX = 4000;
+
+function pushChatSeg(out, text, style) {
+  if (!text || out.total >= CHAT_TEXT_MAX) return;
+  const t = text.slice(0, CHAT_TEXT_MAX - out.total);
+  out.total += t.length;
+  const last = out.segs[out.segs.length - 1];
+  const same = last && last.c === style.c && !!last.b === !!style.b && !!last.i === !!style.i && !!last.u === !!style.u && !!last.s === !!style.s;
+  if (same) { last.t += t; return; }
+  if (out.segs.length >= CHAT_SEGMENTS_MAX) return;
+  const seg = { t };
+  if (style.c) seg.c = style.c;
+  if (style.b) seg.b = 1;
+  if (style.i) seg.i = 1;
+  if (style.u) seg.u = 1;
+  if (style.s) seg.s = 1;
+  out.segs.push(seg);
+}
+
+// Text mit §-Codes (gelten bis zum Ende dieses Textteils, §r = zurueck zum Stil des Teils)
+function pushLegacyText(out, text, base) {
+  let style = { ...base };
+  let buf = '';
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (ch === '§' && i + 1 < text.length) {
+      const code = text[i + 1].toLowerCase();
+      const hex = text.slice(i + 2, i + 8);
+      const bungee = text.slice(i + 2, i + 14);
+      let next = null;
+      let skip = 1;
+      if (code === '#' && /^[0-9a-fA-F]{6}$/.test(hex)) { next = { c: `#${hex.toUpperCase()}` }; skip = 7; }
+      else if (code === 'x' && /^(§[0-9a-fA-F]){6}$/.test(bungee)) { next = { c: `#${bungee.replace(/§/g, '').toUpperCase()}` }; skip = 13; }
+      else if (MC_COLOR_CODES[code]) next = { c: MC_COLOR_CODES[code] }; // Farbe setzt Formate zurueck
+      else if (code === 'r') next = { ...base };
+      else if (code === 'l') next = { ...style, b: true };
+      else if (code === 'o') next = { ...style, i: true };
+      else if (code === 'n') next = { ...style, u: true };
+      else if (code === 'm') next = { ...style, s: true };
+      else if (code === 'k') next = style; // "verschleiert" - einfach normal anzeigen
+      if (next) {
+        pushChatSeg(out, buf, style);
+        buf = '';
+        style = next;
+        i += skip;
+        continue;
+      }
+    }
+    buf += ch;
+  }
+  pushChatSeg(out, buf, style);
+}
+
+function chatFlag(v, inherited) {
+  if (v === undefined || v === null) return inherited;
+  return v === true || v === 'true' || v === 1;
+}
+
+function walkChatNode(node, parent, out, lang, depth) {
+  if (node === undefined || node === null || depth > 24 || out.total >= CHAT_TEXT_MAX) return;
+  if (typeof node === 'string' || typeof node === 'number') { pushLegacyText(out, String(node), parent); return; }
+  if (typeof node !== 'object') return;
+  let c = parent.c;
+  if (typeof node.color === 'string') {
+    if (/^#[0-9a-fA-F]{6}$/.test(node.color)) c = node.color.toUpperCase();
+    else if (MC_COLOR_NAMES[node.color]) c = MC_COLOR_NAMES[node.color];
+    else if (node.color === 'reset') c = undefined;
+  }
+  const style = {
+    c,
+    b: chatFlag(node.bold, parent.b),
+    i: chatFlag(node.italic, parent.i),
+    u: chatFlag(node.underlined, parent.u),
+    s: chatFlag(node.strikethrough, parent.s),
+  };
+  if (typeof node.text === 'string' || typeof node.text === 'number') {
+    pushLegacyText(out, String(node.text), style);
+  } else if (typeof node.translate === 'string') {
+    // Uebersetzung: Platzhalter %s / %1$s mit den with-Teilen fuellen, der Rest im Stil des Teils
+    const args = Array.isArray(node.with) ? node.with : [];
+    let format = lang && typeof lang[node.translate] === 'string' ? lang[node.translate] : null;
+    if (format === null) format = typeof node.fallback === 'string' ? node.fallback : node.translate;
+    let pos = 0;
+    let next = 0;
+    const re = /%(?:(\d+)\$)?([sd%])/g;
+    let m;
+    while ((m = re.exec(format)) !== null) {
+      pushLegacyText(out, format.slice(pos, m.index), style);
+      if (m[2] === '%') pushChatSeg(out, '%', style);
+      else {
+        const idx = m[1] ? parseInt(m[1], 10) - 1 : next++;
+        walkChatNode(args[idx], style, out, lang, depth + 1);
+      }
+      pos = re.lastIndex;
+    }
+    pushLegacyText(out, format.slice(pos), style);
+  } else if (typeof node.selector === 'string') {
+    pushChatSeg(out, node.selector, style);
+  } else if (typeof node.keybind === 'string') {
+    pushChatSeg(out, node.keybind, style);
+  }
+  if (Array.isArray(node.extra)) {
+    for (const child of node.extra) walkChatNode(child, style, out, lang, depth + 1);
+  }
+}
+
+// Farbige Stuecke einer Chatnachricht - oder null, wenn nichts farbig/formatiert ist
+function chatSegments(jsonMsg, lang) {
+  try {
+    const out = { segs: [], total: 0 };
+    walkChatNode(jsonMsg, {}, out, lang, 0);
+    return out.segs.some((x) => x.c || x.b || x.i || x.u || x.s) ? out.segs : null;
+  } catch (e) {
+    return null;
+  }
+}
+
+function logChat(username, text, segs) {
   console.log(`[${username}] ${text}`);
   const serverId = connServerId(username);
   if (serverId !== DEFAULT_SERVER_ID) {
@@ -2426,6 +2560,7 @@ function logChat(username, text) {
     // weiterhin nur den Chat vom Standardserver)
     if (username === chatSourceOf(serverId)) {
       const entry = { username, text, ts: Date.now(), server: serverId };
+      if (segs) entry.segs = segs;
       chatHistory.push(entry);
       pruneChatHistory();
       io.emit('chat', entry);
@@ -2435,6 +2570,7 @@ function logChat(username, text) {
   // Nur Nachrichten des primaeren Accounts werden an die Clients gesendet/gespeichert
   if (username === getPrimaryUsername()) {
     const entry = { username, text, ts: Date.now(), server: DEFAULT_SERVER_ID };
+    if (segs) entry.segs = segs;
     chatHistory.push(entry);
     pruneChatHistory();
     io.emit('chat', entry);
@@ -2587,7 +2723,7 @@ function startBot(username) {
     // das jede Chatnachricht 15-20x im Log. Statusmeldungen ("--- eingeloggt ---" usw.)
     // laufen weiterhin fuer jeden Account ueber logChat.
     if (username !== chatSourceOf(connServerId(username))) return;
-    logChat(username, jsonMsg.toString());
+    logChat(username, jsonMsg.toString(), chatSegments(jsonMsg, bot.registry && bot.registry.language));
   });
 
   // Server verlangt ein Ressourcenpaket (eigene Texturen o.ae.): annehmen, ohne es herunterzuladen -

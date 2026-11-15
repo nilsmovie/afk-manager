@@ -1,5 +1,15 @@
 # Änderungen
 
+## Chat in Farben, Statusleiste pro Server (November 2026)
+
+- **Chat im Dashboard in den Farben wie in Minecraft**: Ränge, Namen und farbige Nachrichten
+  (auch Hex-Farben und §-Codes von Plugins), fett/kursiv/unterstrichen. Sehr dunkle bzw. sehr
+  helle Farben werden nur so weit angepasst, dass sie auf dem Chat-Hintergrund lesbar bleiben
+  (auch im hellen Farbschema). Suche, Export, Discord-Chat und Erweiterungen bekommen weiter
+  reinen Text.
+- **Kopf des Dashboards**: „Hauptserver“ statt „Zielserver“; bei mehreren Servern eine Anzeige
+  „online / gesamt“ pro Server und die Zahl der Accounts insgesamt.
+
 ## Mehrere Server (November 2026)
 
 Ein Account kann jetzt **optional** zusätzlich auf weiteren Servern online sein. Wer das nicht
