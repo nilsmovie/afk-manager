@@ -1662,6 +1662,21 @@ function msaCodeExpired(username, ref) {
   requestBotStart(username);
 }
 
+// Microsoft-Login ist durch (Code eingegeben), die Verbindung zum Server baut sich aber noch auf.
+// Ohne das stand bis zum Spawn weiter "Login nötig (Code eingeben)" - bei Bedrock (NetherNet)
+// dauert das manchmal lange oder klappt gar nicht, dann sah es aus, als hätte der Code nicht geklappt.
+function msaAuthDone(username, ref) {
+  const st = bots[username];
+  if (!st || st.bot !== ref) return;
+  const waitedForCode = st.status === 'Login nötig (Code eingeben)';
+  if (!waitedForCode && !st.msaTimer && !msaCodeMessages[username]) return; // es war kein Code offen
+  if (waitedForCode) st.status = 'verbinde...';
+  io.emit('msa-code-clear', { username });
+  msaLoginSucceeded(username);
+  logChat(username, '--- Microsoft-Login erfolgreich, verbinde mit dem Server ---');
+  broadcastAccountList();
+}
+
 function msaLoginSucceeded(username) {
   const state = bots[username];
   if (state && state.msaTimer) {
@@ -2652,6 +2667,8 @@ function startBot(username) {
     boat: ingame.createBoatDriver(bot, (m) => console.log(`[${username}] ${m}`)),
   };
   broadcastAccountList();
+  // Microsoft-Login fertig (z.B. Code eingegeben) - der Login beim Server kommt erst danach
+  if (bot._client && typeof bot._client.on === 'function') bot._client.on('session', () => msaAuthDone(username, bot));
 
   bot.on('login', () => {
     if (bots[username]?.bot !== bot) return; // Event von einem bereits verworfenen alten Bot-Objekt
@@ -3400,6 +3417,8 @@ function connectBedrockClient(username, acc, route) {
   bots[username].packetCounters = packetCounters;
   attempt.ref = client;
   broadcastAccountList();
+  // Xbox-/Microsoft-Login fertig (z.B. Code eingegeben) - die Verbindung zum Server kommt danach
+  client.on('session', () => msaAuthDone(username, client));
 
   // Kleine Sichtweite auch fuer Bedrock: bedrock-protocol liest diesen Wert erst ~500 ms
   // nach dem Verbindungsaufbau (Paket "request_chunk_radius"), das Setzen hier kommt also

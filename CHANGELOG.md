@@ -1,5 +1,13 @@
 # Änderungen
 
+## Login-Status nach eingegebenem Code (November 2026)
+
+- Nach erfolgreicher Microsoft-Anmeldung steht beim Account sofort „verbinde...“ statt weiter
+  „Login nötig (Code eingeben)“ – auch wenn die Verbindung zum Server noch dauert (bei Bedrock
+  oft deutlich länger). Der Code-Kasten verschwindet, die Discord-Meldung zeigt „angemeldet“.
+- Fehler behoben: Dauerte die Verbindung nach dem Code länger, als der Code gültig gewesen wäre,
+  hat der Manager sie abgebrochen und einen neuen Code verlangt.
+
 ## Rechtsklick im Inventar (November 2026)
 
 - **Halben Stapel nehmen wie im Spiel**: Rechtsklick (Maus) auf einen Stapel im Inventar-Widget
