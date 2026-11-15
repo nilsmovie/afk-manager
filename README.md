@@ -11,8 +11,9 @@ Gebaut für **clashsmp.de**, läuft aber mit jedem Minecraft-Server (Adresse in 
   eigenen Thread), Anmeldung per Microsoft-Code direkt aus dem Dashboard oder Discord
 - **Verbindet von selbst neu** – einer nach dem anderen, mit Pausen bei Dauerfehlern, damit der
   Server die eigene IP nicht sperrt
-- **Dashboard**: Accounts starten/stoppen, Live-Chat, Befehle senden, Steuerung (Laufen, Klicken,
-  Hotbar), Auto-Chat nach dem Einloggen, Uptime pro Tag
+- **Dashboard**: Accounts starten/stoppen, Live-Chat in Minecraft-Farben, Befehle senden,
+  Bewegung (auch Boot fahren), Inventar (verschieben, droppen, craften), Auto-Chat nach dem
+  Einloggen, Uptime pro Tag
 - **Mehrere Server (optional)**: ein Account kann zusätzlich auf weiteren Servern online sein –
   mit eigenem Status, Auto-Chat, Chat und Statistik pro Server, aber nur einem Microsoft-Login
 - **Benutzer mit Rollen**: Owner, Admin, User (User sehen nur die ihnen zugewiesenen Accounts)
@@ -109,7 +110,7 @@ git checkout main          # später wieder auf den neuesten Stand
 
 Diese Dateien entstehen im laufenden Betrieb und kommen **nie** ins Repository (siehe
 `.gitignore`): `.env`, `accounts.json`, `users.json`, `servers.json`, `verbindungen.json`,
-`statistik.json`,
+`statistik.json`, `item-icons/` (Bilder aus dem Spiel, siehe ANLEITUNG),
 `audit.log`, `audit-known-ips.json` und deren Sicherungskopien (auch
 `accounts.vor-mehrserver.json`). Die Microsoft-Logins liegen unter `~/.minecraft/nmp-cache`.
 Gib diese Dateien nie weiter – darin stehen Passwort-Hashes, Discord-Token und die Logins deiner

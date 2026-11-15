@@ -1,5 +1,19 @@
 # Änderungen
 
+## Inventar und Bewegung (November 2026)
+
+- **Steuerung in zwei Widgets**: „Bewegung“ und „Inventar“, beide immer für denselben Account.
+- **Boot fahren**: Sitzt der Account im Boot, fährt W/S und lenkt A/D. Die Bootsfahrt wird wie
+  im Spiel nachgerechnet (Wasser, Eis, Land; Halt an Blöcken; Korrekturen vom Server werden
+  übernommen). Server mit strengem Anti-Cheat können das als Schummeln werten.
+- **Inventar**: Rüstung, Zweithand, Inventar, Schnellleiste und Handwerksfeld mit Anzahl,
+  Haltbarkeit, Verzauberung und eigenem Namen; verschieben (Klick oder Ziehen), stapeln,
+  „In die Hand“, 1/alle droppen (mit Nachfrage bei Stapeln und besonderen Items), Rezeptliste
+  zum Craften (3x3 mit Werkbank in Reichweite). Droppen und Craften stehen im Protokoll.
+- **Echte Item-Bilder und deutsche Namen** optional mit `npm run bilder` (lädt sie mit
+  EULA-Bestätigung direkt von Mojang nach `item-icons/`, bleibt lokal); sonst eigene Symbole.
+- Behoben: „Drop“ in der alten Steuerung hat nie geantwortet (mineflayer arbeitet mit Promises).
+
 ## Chat in Farben, Statusleiste pro Server (November 2026)
 
 - **Chat im Dashboard in den Farben wie in Minecraft**: Ränge, Namen und farbige Nachrichten

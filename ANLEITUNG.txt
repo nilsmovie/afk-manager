@@ -178,8 +178,27 @@ Gut zu wissen:
    sind: Chat-Quelle sein, Ingame-Steuerung (WASD usw.) und die Tab-Taste zur
    Vervollständigung. Antworten auf Befehle siehst du nur, wenn sie im Chat des
    Servers erscheinen.
- - Rechts im Dashboard: Live-Chat (über den gewählten Account schreiben) und
-   eine Steuerung (Laufen, Springen, Schleichen, Klicks, Hotbar, Droppen).
+ - Rechts im Dashboard: Live-Chat (über den gewählten Account schreiben),
+   "Bewegung" (Laufen, Springen, Schleichen, Klicks, Absteigen) und "Inventar".
+   Beide zeigen immer denselben Account (nur Java-Accounts).
+ - Sitzt der Account in einem Boot, fährt W/S das Boot und A/D lenkt. Das Spiel
+   lässt den Spieler die Bootsfahrt selbst berechnen; der Manager rechnet sie
+   nach (Wasser, Eis, Land) und hält an Blöcken an. Server mit strengem
+   Anti-Cheat können das trotzdem als Schummeln werten - dann lieber lassen.
+ - Inventar: Rüstung, Zweithand, Inventar und Schnellleiste mit Anzahl,
+   Haltbarkeit und Verzauberung. Klick auf ein Item wählt es aus (Details,
+   "In die Hand", "1 droppen", "Alle droppen"), Klick auf einen anderen Platz
+   legt es dorthin (am PC auch ziehen). "Rezepte anzeigen" listet alles, was
+   sich mit dem Inventar craften lässt - mit einer Werkbank in Reichweite
+   (ca. 4 Blöcke) auch 3x3-Rezepte. Droppen und Craften stehen im Protokoll.
+   Es darf, wer den Account auch steuern darf.
+ - Echte Item-Bilder und deutsche Namen (einmalig, im Ordner afk-manager):
+      npm run bilder
+   Lädt die Bilder direkt von Mojang (mit Bestätigung der Minecraft-EULA) in
+   den Ordner item-icons/. Die Bilder gehören Mojang: Sie bleiben nur bei dir,
+   kommen nie auf GitHub und sollen nicht weitergegeben werden. Ohne das zeigt
+   das Inventar eigene Symbole und englische Namen. Statt Download geht auch
+   die eigene Spieldatei:  npm run bilder -- --jar /pfad/zu/1.21.4.jar
 
 
 ------------------------------------------------------------------------------
