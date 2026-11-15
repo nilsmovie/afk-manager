@@ -142,7 +142,9 @@ module.exports = {
         await p.click('#invWindow .slot[data-wslot="13"]')
         await p.waitForTimeout(700)
         t.chk('Browser: Linksklick mit der Maus geht direkt', b.klicks.slice(anzahl).some((x) => x[0] === 13 && x[1] === 0), b.klicks.slice(anzahl))
-        t.chk('Browser: „Auf der Maus“ wird angezeigt', /Auf der Maus: 32× Stein/.test(await p.textContent('#winCursor')))
+        let maus = false
+        for (let i = 0; i < 30 && !maus; i++) { maus = /Auf der Maus: 32× Stein/.test(await p.textContent('#winCursor')); if (!maus) await p.waitForTimeout(100) }
+        t.chk('Browser: „Auf der Maus“ wird angezeigt', maus)
         await p.click('#invWindow .slot[data-wslot="20"]', { button: 'right' })
         await p.waitForTimeout(700)
         t.chk('Browser: Rechtsklick mit der Maus geht direkt', b.klicks.slice(anzahl).some((x) => x[0] === 20 && x[1] === 1), b.klicks.slice(anzahl))
