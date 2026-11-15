@@ -1,5 +1,18 @@
 # Änderungen
 
+## Inventar: Verzauberungen, leere Hand, Essen (November 2026)
+
+- **Verzauberungen** werden in allen Minecraft-Versionen erkannt (ab 1.20.5 standen sie nicht
+  mehr da, wo sie vorher waren) – auch auf verzauberten Büchern; Anzeige wie im Spiel
+  („Schärfe V“, „Reparatur“), beim Drüberfahren und in den Details, Flüche in Rot.
+- **Leere Hand**: Klick auf einen leeren Platz der Schnellleiste nimmt ihn in die Hand;
+  die Plätze sind nummeriert.
+- **Essen und Trinken**: Knopf „Essen“/„Trinken“ bei essbaren Items (legt es in die Hand und
+  isst es auf) und als Schnellknopf, wenn Essen in der Hand ist. Satt → verständliche Meldung
+  (goldene Äpfel, Tränke, Milch gehen immer).
+- **Rechtsklick gedrückt halten** benutzt das Item wie im Spiel (Essen, Trinken, Bogen spannen,
+  Schild heben), Loslassen beendet es.
+
 ## Inventar und Bewegung (November 2026)
 
 - **Steuerung in zwei Widgets**: „Bewegung“ und „Inventar“, beide immer für denselben Account.

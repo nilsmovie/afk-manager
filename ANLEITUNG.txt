@@ -192,6 +192,10 @@ Gut zu wissen:
    sich mit dem Inventar craften lässt - mit einer Werkbank in Reichweite
    (ca. 4 Blöcke) auch 3x3-Rezepte. Droppen und Craften stehen im Protokoll.
    Es darf, wer den Account auch steuern darf.
+   Klick auf einen leeren Platz der Schnellleiste nimmt ihn in die Hand. Bei
+   Essen/Tränken gibt es "Essen"/"Trinken" (geht nur mit Hunger, goldene Äpfel,
+   Tränke und Milch immer). "Rechtsklick" in der Bewegung gedrückt halten
+   benutzt das Item wie im Spiel (Essen, Bogen, Schild), Loslassen beendet es.
  - Echte Item-Bilder und deutsche Namen (einmalig, im Ordner afk-manager):
       npm run bilder
    Lädt die Bilder direkt von Mojang (mit Bestätigung der Minecraft-EULA) in

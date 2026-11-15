@@ -1041,6 +1041,9 @@
   .inv-detail .d-name { font-weight: 600; }
   .inv-detail .d-sub { color: var(--text-sub); margin: 2px 0 8px; }
   .inv-detail .d-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+  .inv-detail .d-ench { display: flex; flex-wrap: wrap; gap: 4px 10px; margin: 3px 0 2px; color: #b98cff; }
+  .inv-detail .d-ench .curse { color: #ff6b6b; }
+  .slot .hb-num { position: absolute; left: 3px; top: 1px; font-size: 9px; color: var(--text-sub); opacity: 0.7; pointer-events: none; }
   .inv-craft { margin-top: 14px; border-top: 1px solid var(--border-row); padding-top: 10px; }
   .inv-craft-head { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
   .inv-craft-head input { flex: 1 1 140px; margin: 0; }
@@ -1274,7 +1277,7 @@
           <button class="small" id="ctrlSneak">Schleichen</button>
           <button class="small ghost" id="ctrlDismount">Absteigen</button>
           <button class="small" id="ctrlLeftclick">Linksklick</button>
-          <button class="small" id="ctrlRightclick">Rechtsklick</button>
+          <button class="small" id="ctrlRightclick" title="Rechtsklick – gedrückt halten zum Essen, Trinken, Bogen spannen oder Schild heben">Rechtsklick</button>
         </div>
       </div>
 
@@ -2623,11 +2626,39 @@ document.getElementById('ctrlLeftclick').addEventListener('click', async () => {
   await fetch('/api/control/' + encodeURIComponent(username) + '/leftclick', { method: 'POST' });
 });
 
-document.getElementById('ctrlRightclick').addEventListener('click', async () => {
-  const username = getControlUsername();
-  if (!username) return;
-  await fetch('/api/control/' + encodeURIComponent(username) + '/rightclick', { method: 'POST' });
-});
+// Rechtsklick wie im Spiel: gedrueckt halten benutzt das Item in der Hand (Essen, Trinken, Bogen,
+// Schild), loslassen beendet es. Steht ein Boot/Tier in der Naehe, wird eingestiegen.
+(() => {
+  const btn = document.getElementById('ctrlRightclick');
+  let held = null; // Account, fuer den gerade gedrueckt wird
+  const press = (e) => {
+    e.preventDefault();
+    const username = getControlUsername();
+    if (!username || held) return;
+    held = username;
+    btn.classList.add('active');
+    fetch('/api/control/' + encodeURIComponent(username) + '/rightclick', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ hold: true }),
+    }).catch(() => {});
+  };
+  const release = (e) => {
+    if (e) e.preventDefault();
+    if (!held) return;
+    const username = held;
+    held = null;
+    btn.classList.remove('active');
+    fetch('/api/control/' + encodeURIComponent(username) + '/rightclick-release', { method: 'POST' })
+      .then(() => setTimeout(() => loadInventory(true), 300)).catch(() => {});
+  };
+  btn.addEventListener('mousedown', press);
+  btn.addEventListener('touchstart', press, { passive: false });
+  btn.addEventListener('mouseup', release);
+  btn.addEventListener('mouseleave', release);
+  btn.addEventListener('touchend', release);
+  btn.addEventListener('touchcancel', release);
+})();
 
 // ---------- Inventar ----------
 // Plaetze wie im Spiel: 0 Ergebnis, 1-4 Handwerk 2x2, 5-8 Ruestung, 9-35 Inventar,
@@ -2662,7 +2693,7 @@ function itemSymbol(n) {
     [/cod|salmon|fish/, '🐟'], [/cookie/, '🍪'], [/cake|pie/, '🎂'], [/melon/, '🍉'], [/sweet_berries|glow_berries/, '🍒'],
     [/diamond/, '💎'], [/emerald/, '💚'], [/netherite/, '🟫'], [/gold/, '🟨'], [/iron/, '⬜'], [/copper/, '🟧'],
     [/coal|charcoal/, '⚫'], [/redstone/, '🔴'], [/lapis/, '🔵'], [/quartz|amethyst/, '🔮'], [/egg/, '🥚'],
-    [/arrow/, '➶'], [/torch|lantern|candle/, '🕯️'], [/_bed$/, '🛏️'], [/boat|raft/, '🛶'], [/minecart/, '🛒'],
+    [/arrow/, '➶'], [/torch|lantern|candle/, '🕯️'], [/_bed$/, '🛏️'], [/boat$|_raft$/, '🛶'], [/crafting_table|furnace|smoker|anvil|smithing|loom|grindstone|stonecutter/, '🛠️'], [/minecart/, '🛒'],
     [/string/, '🧵'], [/feather/, '🪶'], [/bone/, '🦴'], [/gunpowder|tnt/, '🧨'], [/ender_pearl|ender_eye/, '🧿'],
     [/totem/, '🗿'], [/shulker_box|chest|barrel/, '📦'], [/firework/, '🎆'], [/sapling|leaves|vine|grass|fern/, '🌱'],
     [/flower|tulip|rose|poppy|dandelion|orchid|daisy|lilac|peony|allium/, '🌸'], [/seeds|wheat|hay/, '🌾'],
@@ -2694,9 +2725,11 @@ function slotHtml(it, slot) {
   } else if (EQUIP_PLACEHOLDER[slot]) {
     inner = `<span class="ph">${EQUIP_PLACEHOLDER[slot]}</span>`;
   }
+  if (slot >= 36 && slot <= 44) inner += `<span class="hb-num">${slot - 35}</span>`;
   const title = it
-    ? `${it.custom ? `„${it.custom}“ – ` : ''}${it.label}${it.count > 1 ? ` (${it.count})` : ''}`
-    : (EQUIP_LABEL[slot] || '');
+    ? `${it.custom ? `„${it.custom}“ – ` : ''}${it.label}${it.count > 1 ? ` (${it.count})` : ''}` +
+      (it.enchants && it.enchants.length ? `\n${it.enchants.map((e) => e.label || e.name).join('\n')}` : '')
+    : (EQUIP_LABEL[slot] || (slot >= 36 && slot <= 44 ? `Schnellleiste ${slot - 35} – klicken, um ihn in die Hand zu nehmen` : ''));
   return `<div class="${cls.join(' ')}" data-slot="${slot}" draggable="${it ? 'true' : 'false'}" title="${escapeHtml(title)}">${inner}</div>`;
 }
 
@@ -2722,7 +2755,14 @@ function renderInventory() {
   const stats = [];
   if (invData.health !== null) stats.push(`❤️ ${escapeHtml(invData.health)} / 20`);
   if (invData.food !== null) stats.push(`🍗 ${escapeHtml(invData.food)} / 20`);
-  document.getElementById('invStats').innerHTML = stats.map((x) => `<span>${x}</span>`).join('');
+  let statsHtml = stats.map((x) => `<span>${x}</span>`).join('');
+  // Schnell-Knopf: Essen in der Hand
+  const heldSlot = 36 + invData.quickBar;
+  const heldItem = s[heldSlot];
+  if (heldItem && heldItem.edible) {
+    statsHtml += `<button class="small" style="margin-top:4px" onclick="invEat(${heldSlot})" title="${escapeHtml(heldItem.label)}">${/potion|bottle|milk/.test(heldItem.name) ? 'Trinken' : 'Essen'}</button>`;
+  }
+  document.getElementById('invStats').innerHTML = statsHtml;
   renderInvDetail();
   // Hinweis in der Bewegung
   if (invData.inBoat) {
@@ -2742,9 +2782,11 @@ function renderInvDetail() {
   const sub = [];
   if (it.count > 1) sub.push(`${it.count} Stück`);
   if (it.durability) sub.push(`Haltbarkeit ${it.durability.left} / ${it.durability.max}`);
-  if (it.enchants && it.enchants.length) sub.push(it.enchants.map((e) => `${e.name.replace(/_/g, ' ')} ${e.lvl}`).join(', '));
   const isHot = invSelected >= 36 && invSelected <= 44;
   const actions = [];
+  if (it.edible && invSelected !== 0 && invSelected !== 45) {
+    actions.push(`<button class="small" onclick="invEat(${invSelected})">${/potion|bottle|milk/.test(it.name) ? 'Trinken' : 'Essen'}</button>`);
+  }
   if (isHot && invSelected !== 36 + invData.quickBar) actions.push(`<button class="small" onclick="invHold(${invSelected})">In die Hand</button>`);
   if (invSelected !== 0) {
     actions.push(`<button class="small ghost" onclick="invDrop(${invSelected}, false)">1 droppen</button>`);
@@ -2753,6 +2795,7 @@ function renderInvDetail() {
   actions.push(`<button class="small ghost" onclick="invSelect(null)">Abwählen</button>`);
   invDetail.innerHTML = `
     <div class="d-name">${it.custom ? `„${escapeHtml(it.custom)}“ – ` : ''}${escapeHtml(it.label)}</div>
+    ${it.enchants && it.enchants.length ? `<div class="d-ench">${it.enchants.map((e) => `<span class="${/curse/.test(e.name) ? 'curse' : ''}">${escapeHtml(e.label || e.name)}</span>`).join('')}</div>` : ''}
     <div class="d-sub">${escapeHtml(sub.join(' · ') || ' ')}${invSelected === 0 ? ' · Ergebnis: auf einen Platz klicken, um es zu nehmen' : ' · Zum Verschieben auf einen anderen Platz klicken oder ziehen'}</div>
     <div class="d-actions">${actions.join('')}</div>`;
 }
@@ -2797,6 +2840,13 @@ async function invDrop(slot, all) {
 async function invHold(slot) {
   await invPost('/hold', { slot });
 }
+async function invEat(slot) {
+  const it = invData && invData.slots[slot];
+  invSelected = null;
+  invStatus.textContent = `${it ? it.label : 'Item'}: wird gegessen…`;
+  await invPost('/eat', { slot });
+  invStatus.textContent = '';
+}
 
 invBody.addEventListener('click', (e) => {
   const el = e.target.closest('.slot[data-slot]');
@@ -2805,6 +2855,7 @@ invBody.addEventListener('click', (e) => {
   if (!(slot >= 0)) return; // Bild in der Rezeptliste
   if (invSelected === null) {
     if (invData.slots[slot]) invSelect(slot);
+    else if (slot >= 36 && slot <= 44 && slot !== 36 + invData.quickBar) invHold(slot); // leere Hand
   } else if (invSelected === slot) {
     invSelect(null);
   } else if (slot !== 0) {

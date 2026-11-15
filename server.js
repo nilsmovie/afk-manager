@@ -4334,6 +4334,18 @@ app.post('/api/inventory/:username/hold', requireAccountAccess, (req, res) => {
   }
 });
 
+app.post('/api/inventory/:username/eat', requireAccountAccess, async (req, res) => {
+  const bot = javaBotFor(req, res);
+  if (!bot) return;
+  const slot = slotNum((req.body || {}).slot);
+  if (!ingame.validSlot(slot)) return res.status(400).json({ error: 'Ungültiger Platz' });
+  try {
+    res.json(await ingame.eatItem(bot, slot));
+  } catch (e) {
+    res.status(400).json({ error: /Food is full/.test(e.message) ? 'Der Account ist satt – essen geht erst wieder mit Hunger' : e.message });
+  }
+});
+
 app.get('/api/inventory/:username/recipes', requireAccountAccess, (req, res) => {
   const bot = javaBotFor(req, res);
   if (!bot) return;
@@ -4413,7 +4425,24 @@ app.post('/api/control/:username/rightclick', requireAccountAccess, (req, res) =
       bot.mount(nearestVehicle);
     } else {
       console.log(`[${username}] Rechtsklick: kein einsteigbares Fahrzeug in Reichweite gefunden. In der Naehe: ${nearbyForDebug.join(', ') || '(nichts)'}`);
+      // Gedrueckt halten (Essen, Trinken, Bogen, Schild): benutzen, bis losgelassen wird
       bot.activateItem();
+      if ((req.body || {}).hold) botState.holdingUse = true;
+    }
+    res.json({ ok: true, mounted: !!nearestVehicle });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Rechtsklick losgelassen: Benutzen beenden (wie Maustaste loslassen im Spiel)
+app.post('/api/control/:username/rightclick-release', requireAccountAccess, (req, res) => {
+  const botState = bots[req.params.username];
+  if (!botState || !botState.bot) return res.status(400).json({ error: 'Account ist nicht online' });
+  try {
+    if (botState.holdingUse) {
+      botState.holdingUse = false;
+      botState.bot.deactivateItem();
     }
     res.json({ ok: true });
   } catch (e) {

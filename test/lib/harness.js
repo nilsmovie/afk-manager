@@ -140,6 +140,15 @@ class FakeJavaBot extends EventEmitter {
   acceptResourcePack () { this.paketeAngenommen++ }
   blockAt (v) { return this.welt(Math.floor(v.x), Math.floor(v.y), Math.floor(v.z)) }
   moveVehicle (left, forward) { this.vehicleEingaben.push([left, forward]) }
+  activateItem (off) { this.steuerung.push(['activate', !!off]) }
+  deactivateItem () { this.steuerung.push(['deactivate']) }
+  async consume () {
+    const it = this.inventory.slots[36 + this.quickBarSlot]
+    if (this.food >= 20 && !(it && /golden_apple|potion|milk/.test(it.name))) throw new Error('Food is full')
+    this.steuerung.push(['consume', it ? it.name : null])
+    if (it) { it.count--; if (it.count === 0) this.inventory.slots[36 + this.quickBarSlot] = null }
+    this.food = Math.min(20, this.food + 5)
+  }
   closeWindow () { this.currentWindow = null }
   async moveSlotItem (a, b) {
     const s = this.inventory.slots
