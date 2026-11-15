@@ -16,6 +16,7 @@ const tuning = require('./bedrock-tuning')
 const cfg = workerData
 if (cfg.fastInflate) tuning.enableFastInflate()
 const bedrock = require('bedrock-protocol')
+require('./microsoft-login').install() // Ablehnung durch Microsoft sofort melden (siehe dort)
 const nnhttp = require('./nethernet-http')
 
 function post (msg) {
