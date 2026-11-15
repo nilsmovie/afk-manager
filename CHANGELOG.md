@@ -1,5 +1,17 @@
 # Änderungen
 
+## Item-Bilder für alle Items (November 2026)
+
+- **Bilder auch für Items ohne eigenes Bild**: `npm run bilder` liest jetzt die Modelle aus dem
+  Spiel. Stufen, Treppen, Mauern, Zäune, Knöpfe, Teppiche, gewachste Kupferblöcke und Ähnliches
+  zeigen das Bild ihres Blocks; der verzauberte goldene Apfel das des goldenen Apfels.
+- **Truhen, Endertruhen, Betten, Köpfe, Banner, Schild und Krug** werden im Spiel als 3D-Modell
+  gezeichnet – für sie baut `npm run bilder` ein Bild aus ihrer Textur (Vorderseite bzw. von oben).
+- Animierte Texturen (Magma, Meereslaterne …) zeigen nur ihr erstes Bild statt eines Streifens.
+- Verzauberter goldener Apfel, Verzauberungsbuch, Erfahrungsfläschchen, Netherstern und
+  Enderkristall glitzern wie im Spiel.
+- Nach einem neuen `npm run bilder` lädt der Browser die neuen Bilder von selbst (kein Neustart nötig).
+
 ## Fenster und Menüs im Inventar (November 2026)
 
 - **Offene Fenster im Dashboard**: Öffnet ein Account im Spiel ein Fenster – eine Kiste, einen

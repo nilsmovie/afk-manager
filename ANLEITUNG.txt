@@ -212,6 +212,9 @@ Gut zu wissen:
    kommen nie auf GitHub und sollen nicht weitergegeben werden. Ohne das zeigt
    das Inventar eigene Symbole und englische Namen. Statt Download geht auch
    die eigene Spieldatei:  npm run bilder -- --jar /pfad/zu/1.21.4.jar
+   Items ohne eigenes Bild (Stufen, Zäune, Truhen, Betten, Köpfe ...) bekommen
+   ihr Bild über die Modelle des Spiels. Wer "npm run bilder" schon vor diesem
+   Update ausgeführt hat, führt es einfach nochmal aus.
 
 
 ------------------------------------------------------------------------------

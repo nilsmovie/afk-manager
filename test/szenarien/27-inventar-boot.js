@@ -25,7 +25,7 @@ module.exports = {
     t.chk('Inventar: 46 Plätze', r.status === 200 && s.length === 46, r.data)
     t.chk('Deutscher Name, eigener Name, Haltbarkeit, Verzauberung', s[36].label === 'Diamantschwert' && s[36].custom === 'Excalibur' && s[36].durability.left === 1161 && s[36].enchants[0].name === 'sharpness', s[36])
     t.chk('Ohne Übersetzung: englischer Name', s[5].label === 'Diamond Helmet', s[5])
-    t.chk('Hand, Leben, Hunger, Bilder', r.data.quickBar === 0 && r.data.health === 20 && r.data.food === 18 && r.data.icons === true && r.data.inBoat === false)
+    t.chk('Hand, Leben, Hunger, Bilder', r.data.quickBar === 0 && r.data.health === 20 && r.data.food === 18 && typeof r.data.icons === 'number' && r.data.icons > 0 && r.data.inBoat === false)
 
     // Bilder
     const bild = await t.api('GET', '/item-icons/diamond_sword')
