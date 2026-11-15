@@ -132,7 +132,8 @@ class FakeJavaBot extends EventEmitter {
   kick (grund) { this.emit('kicked', grund, true); this.beendet = true; this.emit('end', 'kicked') }
   trennen () { this.beendet = true; this.emit('end', 'socketClosed') }
   fehler (msg, code) { const e = new Error(msg); if (code) e.code = code; this.emit('error', e) }
-  chatEmpfangen (text) { this.emit('message', { toString: () => text }) }
+  // json: optional der Aufbau der Nachricht wie im Spiel ({ text, color, extra: [...] }) fuer Farben
+  chatEmpfangen (text, json) { this.emit('message', { toString: () => text, ...(json || {}) }) }
   code (data = {}) { this.opts.onMsaCode({ user_code: 'TESTCODE', verification_uri: 'https://www.microsoft.com/link', expires_in: 900, message: 'Code', ...data }) }
 }
 
