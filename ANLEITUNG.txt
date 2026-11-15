@@ -196,6 +196,9 @@ Gut zu wissen:
    Essen/Tränken gibt es "Essen"/"Trinken" (geht nur mit Hunger, goldene Äpfel,
    Tränke und Milch immer). "Rechtsklick" in der Bewegung gedrückt halten
    benutzt das Item wie im Spiel (Essen, Bogen, Schild), Loslassen beendet es.
+ - Rechtsklick auf einen Stapel nimmt wie im Spiel die Hälfte an die Maus
+   (am Handy: Item antippen, "Hälfte nehmen"). Danach legt ein Linksklick
+   alles ab, ein Rechtsklick eins. "Zurücklegen" legt es wieder ins Inventar.
  - Fenster und Menüs: Geht im Spiel ein Fenster auf (Kiste, Ofen, oder ein
    Menü nach einem Befehl wie /warp), zeigt das Inventar-Widget genau dieses
    Fenster - oben der Inhalt (Titel und Item-Namen in Farbe, Beschreibung

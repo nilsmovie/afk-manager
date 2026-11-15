@@ -4348,6 +4348,38 @@ app.post('/api/inventory/:username/drop', requireAccountAccess, async (req, res)
   }
 });
 
+// Klick im eigenen Inventar (Rechtsklick = halber Stapel an die Maus, Klick legt ihn wieder ab)
+app.post('/api/inventory/:username/click', requireAccountAccess, async (req, res) => {
+  const bot = javaBotFor(req, res);
+  if (!bot) return;
+  const b = req.body || {};
+  const slot = (typeof b.slot === 'number' || typeof b.slot === 'string') && /^-?\d{1,3}$/.test(String(b.slot)) ? Number(b.slot) : NaN;
+  const button = Number(b.button);
+  if (!(slot === -999 || ingame.validSlot(slot, { allowResult: true })) || (button !== 0 && button !== 1)) {
+    return res.status(400).json({ error: 'Ungültiger Klick' });
+  }
+  try {
+    const r = await ingame.inventoryClick(bot, slot, button);
+    const what = slot === -999 ? 'außerhalb (wegwerfen)'
+      : r.item ? `${r.item.count}× ${(r.item.custom || r.item.label).slice(0, 60)}` : 'leeren Platz';
+    auditWeb(req, 'Klick im Inventar', req.params.username, `${button === 1 ? 'Rechtsklick' : 'Linksklick'} auf ${what}`);
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+// Item an der Maus zurück ins Inventar legen
+app.post('/api/inventory/:username/cursor-back', requireAccountAccess, async (req, res) => {
+  const bot = javaBotFor(req, res);
+  if (!bot) return;
+  try {
+    res.json(await ingame.cursorBack(bot));
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
 app.post('/api/inventory/:username/hold', requireAccountAccess, (req, res) => {
   const bot = javaBotFor(req, res);
   if (!bot) return;

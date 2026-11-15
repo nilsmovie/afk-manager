@@ -1436,6 +1436,7 @@
         </div>
         <div class="inv-main" id="invMain"></div>
         <div class="inv-hotbar" id="invHotbar"></div>
+        <div class="win-cursor" id="invCursor"></div>
         <div class="inv-detail" id="invDetail"></div>
         <div class="inv-craft">
           <div class="inv-craft-head">
@@ -3035,6 +3036,7 @@ const vehicleHint = document.getElementById('vehicleHint');
 let invData = null;
 let invRaw = '';
 let invSelected = null;
+let invCursorTarget = null; // Touch: Platz, auf den das Item an der Maus soll
 let invDragFrom = null;
 let invTimer = null;
 let invBusy = false;
@@ -3085,7 +3087,7 @@ function slotInner(it) {
 
 function slotHtml(it, slot) {
   const cls = ['slot'];
-  if (invSelected === slot) cls.push('selected');
+  if (invSelected === slot || invCursorTarget === slot) cls.push('selected');
   if (invData && slot === 36 + invData.quickBar) cls.push('held');
   if (it && ((it.enchants && it.enchants.length) || it.glint)) cls.push('ench');
   let inner = '';
@@ -3099,7 +3101,8 @@ function slotHtml(it, slot) {
     ? `${it.custom ? `„${it.custom}“ – ` : ''}${it.label}${it.count > 1 ? ` (${it.count})` : ''}` +
       (it.enchants && it.enchants.length ? `\n${it.enchants.map((e) => e.label || e.name).join('\n')}` : '')
     : (EQUIP_LABEL[slot] || (slot >= 36 && slot <= 44 ? `Schnellleiste ${slot - 35} – klicken, um ihn in die Hand zu nehmen` : ''));
-  return `<div class="${cls.join(' ')}" data-slot="${slot}" draggable="${it ? 'true' : 'false'}" title="${escapeHtml(title)}">${inner}</div>`;
+  const drag = it && !(invData && invData.cursor);
+  return `<div class="${cls.join(' ')}" data-slot="${slot}" draggable="${drag ? 'true' : 'false'}" title="${escapeHtml(title)}">${inner}</div>`;
 }
 
 // Kein Bild fuer dieses Item -> eigenes Symbol (und nicht nochmal nachfragen)
@@ -3141,6 +3144,10 @@ function renderInvSlots() {
     statsHtml += `<button class="small" style="margin-top:4px" onclick="invEat(${heldSlot})" title="${escapeHtml(heldItem.label)}">${/potion|bottle|milk/.test(heldItem.name) ? 'Trinken' : 'Essen'}</button>`;
   }
   document.getElementById('invStats').innerHTML = statsHtml;
+  const c = invData.cursor;
+  document.getElementById('invCursor').innerHTML = c
+    ? `<span class="slot">${slotInner(c)}</span><span class="c-text">Auf der Maus: <b>${escapeHtml(c.count)}× ${escapeHtml(c.custom ? `„${c.custom}“` : c.label)}</b> – Linksklick legt alles ab, Rechtsklick eins</span><button class="small" onclick="invCursorBack()">Zurücklegen</button><button class="small ghost" onclick="invCursorDrop()">Wegwerfen</button>`
+    : '';
   renderInvDetail();
 }
 
@@ -3158,6 +3165,19 @@ function renderVehicleHint() {
 }
 
 function renderInvDetail() {
+  // Item an der Maus (Touch): Platz gewählt -> wie ablegen?
+  if (invData && invData.cursor && invCursorTarget !== null) {
+    const tgt = invData.slots[invCursorTarget];
+    invDetail.innerHTML = `
+      <div class="d-name">${tgt ? `${escapeHtml(tgt.label)}${tgt.count > 1 ? ` <small>· ${escapeHtml(tgt.count)} Stück</small>` : ''}` : 'Leerer Platz'}</div>
+      <div class="d-actions">
+        <button class="small" onclick="invClick(${Number(invCursorTarget)}, 0)">${tgt ? 'Linksklick' : 'Alles ablegen'}</button>
+        <button class="small" onclick="invClick(${Number(invCursorTarget)}, 1)">${tgt ? 'Rechtsklick' : 'Eins ablegen'}</button>
+        <button class="small ghost" onclick="invCursorTarget = null; renderInventory()">Abbrechen</button>
+      </div>
+      <div class="d-help">${tgt ? 'Linksklick: tauschen oder dazulegen · Rechtsklick: eins dazulegen' : 'Linksklick legt den ganzen Stapel ab, Rechtsklick nur eins.'}</div>`;
+    return;
+  }
   const it = invSelected !== null && invData ? invData.slots[invSelected] : null;
   if (!it) { invDetail.innerHTML = ''; return; }
   const sub = [];
@@ -3169,6 +3189,7 @@ function renderInvDetail() {
     actions.push(`<button class="small" onclick="invEat(${invSelected})">${/potion|bottle|milk/.test(it.name) ? 'Trinken' : 'Essen'}</button>`);
   }
   if (isHot && invSelected !== 36 + invData.quickBar) actions.push(`<button class="small" onclick="invHold(${invSelected})">In die Hand</button>`);
+  if (it.count > 1) actions.push(`<button class="small" onclick="invClick(${invSelected}, 1)" title="Wie Rechtsklick im Spiel: die Hälfte hängt dann an der Maus">Hälfte nehmen</button>`);
   if (invSelected !== 0) {
     actions.push(`<button class="small ghost" onclick="invDrop(${invSelected}, false)">1 droppen</button>`);
     if (it.count > 1) actions.push(`<button class="small ghost stop" onclick="invDrop(${invSelected}, true)">Alle ${escapeHtml(it.count)} droppen</button>`);
@@ -3229,11 +3250,47 @@ async function invEat(slot) {
   invStatus.textContent = '';
 }
 
+// Klick wie im Spiel (Rechtsklick = halber Stapel an die Maus; mit Item an der Maus: ablegen)
+async function invClick(slot, button) {
+  invSelected = null;
+  invCursorTarget = null;
+  await invPost('/click', { slot, button });
+}
+async function invCursorBack() {
+  invCursorTarget = null;
+  await invPost('/cursor-back', {});
+}
+async function invCursorDrop() {
+  const c = invData && invData.cursor;
+  if (!c) return;
+  const ok = await showConfirm(`${c.count} × ${c.label}${c.custom ? ` „${c.custom}“` : ''} wegwerfen?`, { title: 'Item wegwerfen', okLabel: 'Wegwerfen', danger: true });
+  if (ok) invClick(-999, 0);
+}
+let invPointer = 'mouse';
+invBody.addEventListener('pointerdown', (e) => { invPointer = e.pointerType || 'mouse'; });
+invBody.addEventListener('contextmenu', (e) => {
+  const el = e.target.closest('#invNormal .slot[data-slot]');
+  if (!el || !invData || invData.window) return;
+  const slot = Number(el.dataset.slot);
+  if (!(slot >= 0)) return;
+  e.preventDefault();
+  if (invBusy) return;
+  if (invPointer === 'mouse') invClick(slot, 1); // Rechtsklick wie im Spiel
+  else if (invData.cursor) { invCursorTarget = slot; renderInventory(); } // langes Drücken am Handy
+  else if (invData.slots[slot]) invSelect(slot);
+});
 invBody.addEventListener('click', (e) => {
   const el = e.target.closest('.slot[data-slot]');
   if (!el || !invData || invBusy) return;
   const slot = Number(el.dataset.slot);
   if (!(slot >= 0)) return; // Bild in der Rezeptliste
+  if (invData.cursor) {
+    // Item hängt an der Maus: mit der Maus direkt ablegen, am Handy erst fragen wie
+    const pt = typeof e.pointerType === 'string' && e.pointerType ? e.pointerType : invPointer;
+    if (pt === 'mouse') invClick(slot, 0);
+    else { invCursorTarget = invCursorTarget === slot ? null : slot; renderInventory(); }
+    return;
+  }
   if (invSelected === null) {
     if (invData.slots[slot]) invSelect(slot);
     else if (slot >= 36 && slot <= 44 && slot !== 36 + invData.quickBar) invHold(slot); // leere Hand
@@ -3512,7 +3569,8 @@ async function loadInventory(force = false) {
       } else if (text !== invRaw) {
         invRaw = text;
         invData = JSON.parse(text);
-        if (invSelected !== null && (!invData.slots[invSelected] || invData.window)) invSelected = null;
+        if (invSelected !== null && (!invData.slots[invSelected] || invData.window || invData.cursor)) invSelected = null;
+        if (!invData.cursor) invCursorTarget = null;
         if (!invData.window) winShownId = null;
         invStatus.textContent = '';
         invBody.hidden = false;

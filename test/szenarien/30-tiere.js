@@ -47,7 +47,9 @@ module.exports = {
       // Klick: Spruch passt zum Tier
       await p.selectOption('#petSelect', 'dog')
       await p.waitForTimeout(2500)
-      await p.click('#catSvg')
+      // direkt auslösen: das Tier "atmet" (Animation) und weicht dem Mauszeiger aus - ein echter
+      // Mausklick ist unter Last deshalb nicht zuverlässig
+      await p.$eval('#catSvg', (el) => el.dispatchEvent(new MouseEvent('click', { bubbles: true })))
       const spruch = await p.textContent('#catBubble')
       const hundeSprueche = ['Wuff!', 'Wuff wuff!', 'Gassi? 🦴', 'Stöckchen!', 'Alles online?', 'Mach Pause!']
       t.chk(`${ww} Klick auf den Hund: Hunde-Spruch`, hundeSprueche.includes(spruch), spruch)

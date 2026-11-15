@@ -1,5 +1,14 @@
 # Änderungen
 
+## Rechtsklick im Inventar (November 2026)
+
+- **Halben Stapel nehmen wie im Spiel**: Rechtsklick (Maus) auf einen Stapel im Inventar-Widget
+  nimmt die Hälfte „an die Maus“; am Handy über „Hälfte nehmen“ beim ausgewählten Item.
+- Mit Item an der Maus: Linksklick legt alles ab, Rechtsklick eins (auch zum Tauschen und
+  Dazulegen); am Handy Platz antippen, dann „Alles ablegen“ / „Eins ablegen“ / „Abbrechen“.
+- Knöpfe „Zurücklegen“ und „Wegwerfen“; andere Aktionen (Verschieben, Droppen, Essen, Craften)
+  legen das Item an der Maus vorher von selbst zurück. Klicks stehen im Protokoll.
+
 ## Tier auswählen (November 2026)
 
 - Im Widget „Katzenpause“ kann man jetzt per Auswahl das Tier wechseln: **Katze, Hund, Fuchs,
