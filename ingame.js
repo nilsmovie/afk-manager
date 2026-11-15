@@ -458,6 +458,8 @@ function inventorySnapshot(bot, opts = {}) {
     quickBar: typeof bot.quickBarSlot === 'number' ? bot.quickBarSlot : 0,
     windowOpen: !!bot.currentWindow,
     window: windowSnapshot(bot, opts.formatTitle),
+    // Item "an der Maus" im eigenen Inventar (z.B. halber Stapel nach Rechtsklick)
+    cursor: !bot.currentWindow && bot.inventory ? itemInfo(bot.inventory.selectedItem, -1, bot.registry, opts.formatTitle) : null,
     vehicle: v && v.name ? String(v.name) : null,
     inBoat: isBoatEntity(v),
     health: typeof bot.health === 'number' ? Math.round(bot.health * 10) / 10 : null,
@@ -479,11 +481,72 @@ function runExclusive(bot, fn, timeoutMs = 15000) {
   return next;
 }
 
-// Offenes Fenster (Kiste o.ae.) zuerst schliessen - sonst gelten andere Platznummern
+// Offenes Fenster (Kiste o.ae.) zuerst schliessen - sonst gelten andere Platznummern.
+// Haengt noch ein Item "an der Maus" (halber Stapel per Rechtsklick), kommt es vorher zurueck.
 async function ensureInventoryWindow(bot) {
   if (bot.currentWindow && typeof bot.closeWindow === 'function') {
     try { bot.closeWindow(bot.currentWindow); } catch (e) { /* egal */ }
   }
+  if (!bot.currentWindow) await putCursorBack(bot);
+}
+
+// Woher das Item an der Maus kam (dorthin kommt es bevorzugt zurueck)
+const pickedFrom = new WeakMap();
+function sameKind(a, b) {
+  if (!a || !b || a.type !== b.type) return false;
+  const Ctor = a.constructor;
+  if (Ctor && typeof Ctor.equal === 'function') {
+    try { return Ctor.equal(a, b, false, true); } catch (e) { return true; }
+  }
+  return a.name === b.name;
+}
+async function putCursorBack(bot) {
+  const inv = bot.inventory;
+  if (!inv || !Array.isArray(inv.slots)) return;
+  for (let round = 0; round < 8 && inv.selectedItem; round++) {
+    const c = inv.selectedItem;
+    const fits = (s) => {
+      const it = inv.slots[s];
+      if (!it) return true;
+      return sameKind(it, c) && it.count < (it.stackSize || 64);
+    };
+    let target = -1;
+    const from = pickedFrom.get(bot);
+    if (Number.isInteger(from) && from >= 9 && from <= 45 && fits(from)) target = from;
+    for (let s = 9; s <= 44 && target < 0; s++) if (inv.slots[s] && fits(s)) target = s;
+    for (let s = 9; s <= 44 && target < 0; s++) if (!inv.slots[s]) target = s;
+    if (target < 0) throw new Error('Kein Platz frei für das Item an der Maus – erst etwas wegwerfen');
+    await bot.clickWindow(target, 0, 0);
+  }
+  if (!inv.selectedItem) pickedFrom.delete(bot);
+}
+
+// Links-/Rechtsklick im eigenen Inventar wie im Spiel (Rechtsklick nimmt den halben Stapel)
+async function inventoryClick(bot, slot, button) {
+  return runExclusive(bot, async () => {
+    if (bot.currentWindow) throw new Error('Gerade ist ein Fenster offen – bitte dort klicken');
+    const inv = bot.inventory;
+    if (slot !== -999 && !validSlot(slot, { allowResult: true })) throw new Error('Ungültiger Platz');
+    if (slot === -999 && !inv.selectedItem) throw new Error('Du hast gerade nichts auf der Maus');
+    const hadCursor = !!inv.selectedItem;
+    const before = itemInfo(slot === -999 ? inv.selectedItem : inv.slots[slot], slot, bot.registry);
+    try {
+      await bot.clickWindow(slot, button, 0);
+    } catch (e) {
+      throw new Error(`Der Klick ging nicht durch (${String(e && e.message ? e.message : e).slice(0, 80)})`);
+    }
+    if (!hadCursor && inv.selectedItem && slot >= 0) pickedFrom.set(bot, slot);
+    return { ok: true, item: before, cursor: itemInfo(inv.selectedItem, -1, bot.registry) };
+  }, 8000);
+}
+
+async function cursorBack(bot) {
+  return runExclusive(bot, async () => {
+    if (bot.currentWindow) throw new Error('Gerade ist ein Fenster offen – bitte dort klicken');
+    const had = itemInfo(bot.inventory.selectedItem, -1, bot.registry);
+    await putCursorBack(bot);
+    return { ok: true, item: had };
+  }, 8000);
 }
 
 function validSlot(n, { allowResult = false } = {}) {
@@ -634,6 +697,8 @@ async function craftItem(bot, itemId, times) {
 }
 
 module.exports = {
+  inventoryClick,
+  cursorBack,
   isBoatEntity,
   createBoatDriver,
   inventorySnapshot,

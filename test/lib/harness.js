@@ -174,7 +174,50 @@ class FakeJavaBot extends EventEmitter {
       if (!it) return
       if (button === 1 || it.count === 1) this.inventory.slots[slot] = null
       else it.count--
+      return
     }
+    if (mode === 0) this.inventarKlick(slot, button)
+  }
+
+  // Links-/Rechtsklick im eigenen Inventar wie im Spiel (mit Item "an der Maus")
+  inventarKlick (slot, button) {
+    const inv = this.inventory
+    const cur = inv.selectedItem || null
+    const kopie = (x, n) => ({ ...x, count: n })
+    if (slot === -999) {
+      if (!cur) return
+      if (button === 1 && cur.count > 1) cur.count--
+      else inv.selectedItem = null
+      return
+    }
+    const it = inv.slots[slot]
+    if (!cur) {
+      if (!it) return
+      if (button === 0) { inv.slots[slot] = null; inv.selectedItem = it; return }
+      const nimm = Math.ceil(it.count / 2)
+      inv.selectedItem = kopie(it, nimm)
+      if (it.count - nimm > 0) it.count -= nimm
+      else inv.slots[slot] = null
+      return
+    }
+    if (!it) {
+      if (button === 0) { inv.slots[slot] = { ...cur, slot }; inv.selectedItem = null; return }
+      inv.slots[slot] = { ...kopie(cur, 1), slot }
+      if (cur.count > 1) cur.count--
+      else inv.selectedItem = null
+      return
+    }
+    if (it.type === cur.type) {
+      const platz = (it.stackSize || 64) - it.count
+      const n = Math.min(platz, button === 0 ? cur.count : 1)
+      it.count += n
+      cur.count -= n
+      if (cur.count <= 0) inv.selectedItem = null
+      return
+    }
+    // anderes Item: tauschen
+    inv.slots[slot] = { ...cur, slot }
+    inv.selectedItem = it
   }
   findBlock (opts) { return this.werkbank ? { name: 'crafting_table', position: { x: 1, y: 64, z: 1 } } : null }
   recipesFor (id, meta, min, table) {
