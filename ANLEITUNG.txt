@@ -232,7 +232,9 @@ Server anlegen (Owner und Admins):
    Verwaltung -> Karte "Server" -> "+ Server hinzufügen":
       Name          z.B. Lobby (so heißt er im Dashboard und in Discord)
       Kürzel        für Discord, z.B. lobby  ->  !start NilsMovie@lobby
-                    (leer lassen = wird aus dem Namen gebildet, bleibt fest)
+                    (leer lassen = wird aus dem Namen gebildet; später
+                    unter "Bearbeiten" änderbar - laufende Verbindungen auf
+                    dem Server starten dafür kurz neu)
       Adresse       ohne Port, z.B. play.beispiel.net oder 192.168.1.20
       Java-Port     leer = auf diesem Server keine Java-Accounts
       Bedrock-Port  leer = auf diesem Server keine Bedrock-Accounts

@@ -758,7 +758,9 @@ function renderServers() {
               <input id="srvEditBedrock-${i}" inputmode="numeric" maxlength="5" value="${escapeHtml(sv.bedrockPort || '')}" />
             </div>
           </div>
-          <span class="sub">Das Kürzel <span class="srv-id">@${escapeHtml(sv.id)}</span> bleibt fest. Neue Adresse/Ports gelten ab der nächsten Verbindung.</span><br />
+          <label class="field-label">Kürzel für Discord – z.B. <code>!start Name@${escapeHtml(sv.id)}</code></label>
+          <input id="srvEditId-${i}" maxlength="24" value="${escapeHtml(sv.id)}" autocomplete="off" spellcheck="false" />
+          <span class="sub">Neue Adresse/Ports gelten ab der nächsten Verbindung. Ein neues Kürzel gilt sofort; laufende Verbindungen auf diesem Server werden dafür kurz neu gestartet.</span><br />
           <button class="small" style="margin-top:8px" onclick="saveServer(${jsArg(sv.id)}, ${i})">Speichern</button>
         `}
         <div class="panel-title" style="margin-top:${sv.isDefault ? '0' : '16px'}">Auto-Chat-Vorlage</div>
@@ -818,16 +820,29 @@ async function createServer() {
 async function saveServer(id, i) {
   const err = document.getElementById(`srvError-${i}`);
   err.textContent = '';
+  const newId = document.getElementById(`srvEditId-${i}`).value.trim().toLowerCase();
+  const sv = allServers.find((x) => x.id === id);
+  if (newId && newId !== id && sv && sv.connections > 0) {
+    const confirmed = await showConfirm(
+      `Kürzel von @${id} auf @${newId} ändern? Die ${sv.connections === 1 ? 'Verbindung' : `${sv.connections} Verbindungen`} auf diesem Server ${sv.connections === 1 ? 'wird' : 'werden'} dafür kurz neu gestartet. In Discord heißt es danach Name@${newId}.`,
+      { title: 'Kürzel ändern', okLabel: 'Ändern' }
+    );
+    if (!confirmed) return;
+  }
   const r = await sendJson('PUT', `/api/servers/${encodeURIComponent(id)}`, {
     name: document.getElementById(`srvEditName-${i}`).value,
     host: document.getElementById(`srvEditHost-${i}`).value,
     javaPort: document.getElementById(`srvEditJava-${i}`).value,
     bedrockPort: document.getElementById(`srvEditBedrock-${i}`).value,
+    id: newId,
   });
   if (!r.ok) { err.textContent = r.data.error || 'Fehler beim Speichern'; return; }
+  const savedId = r.data.server && r.data.server.id ? r.data.server.id : id;
+  if (savedId !== id && openServerPanels.has(id)) { openServerPanels.delete(id); openServerPanels.add(savedId); }
   await loadServers();
-  const ok = document.getElementById(`srvSuccess-${i}`);
-  if (ok) ok.textContent = 'Gespeichert.';
+  const idx = allServers.findIndex((x) => x.id === savedId);
+  const ok = document.getElementById(`srvSuccess-${idx >= 0 ? idx : i}`);
+  if (ok) ok.textContent = r.data.moved && r.data.moved.restarted ? `Gespeichert. ${r.data.moved.restarted} Verbindung(en) werden neu gestartet.` : 'Gespeichert.';
 }
 
 async function deleteServer(id) {

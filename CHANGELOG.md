@@ -1,5 +1,14 @@
 # Änderungen
 
+## Server-Kürzel änderbar (November 2026)
+
+- Das Kürzel eines weiteren Servers (für Discord, z.B. `!start Name@lobby`) lässt sich jetzt in
+  der Verwaltung unter „Bearbeiten“ ändern. Alle Verbindungen ziehen mit um: Einstellungen,
+  Auto-Chat, Online-Zeit, „gestoppt“-Merker und Chat-Verlauf.
+- Laufende Verbindungen auf dem Server werden dafür kurz getrennt und gleich wieder gestartet
+  (mit Rückfrage); gestoppte bleiben gestoppt. In Discord gilt sofort das neue Kürzel, der
+  Servername funktioniert weiterhin. Die Änderung steht im Protokoll.
+
 ## Microsoft lehnt die Anmeldung ab (November 2026)
 
 - Lehnt Microsoft die Anmeldung nach der Code-Eingabe ab (z.B. „user interaction is required“ –
