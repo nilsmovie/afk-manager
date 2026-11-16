@@ -1,5 +1,13 @@
 # Änderungen
 
+## Chat: Hochscrollen bleibt stehen (November 2026)
+
+- Wer im Chat hochscrollt, wird von neuen Nachrichten nicht mehr nach unten geworfen. Stattdessen
+  erscheint unten ein Knopf „↓ 3 neue Nachrichten“ – ein Klick (oder selbst runterscrollen)
+  springt zurück nach unten. Unten läuft der Chat wie gewohnt mit.
+- Auch beim Wechsel des Farbschemas bleibt die Stelle; eigene Nachrichten, ein anderer Server
+  oder eine neue Suche springen nach unten.
+
 ## Server-Kürzel änderbar (November 2026)
 
 - Das Kürzel eines weiteren Servers (für Discord, z.B. `!start Name@lobby`) lässt sich jetzt in
