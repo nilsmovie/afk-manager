@@ -700,6 +700,21 @@
     font-size: 12.5px;
     padding: 7px 10px;
   }
+  /* Hochgescrollt: neue Nachrichten werfen einen nicht nach unten, sondern zeigen diesen Knopf */
+  .chatlog-wrap { position: relative; }
+  .chat-new-btn {
+    position: absolute;
+    left: 50%;
+    bottom: 12px;
+    transform: translateX(-50%);
+    padding: 6px 14px;
+    font-size: 12.5px;
+    border-radius: 999px;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
+    white-space: nowrap;
+    z-index: 2;
+  }
+  .chat-new-btn[hidden] { display: none; }
   #chatlog {
     height: 400px;
     overflow-y: auto;
@@ -1313,7 +1328,10 @@
           <button class="icon-btn ghost" id="exportChatBtn" title="Verlauf exportieren">⬇</button>
         </div>
       </div>
-      <div id="chatlog"></div>
+      <div class="chatlog-wrap">
+        <div id="chatlog"></div>
+        <button type="button" class="chat-new-btn" id="chatNewBtn" hidden>↓ Neue Nachrichten</button>
+      </div>
       <div class="send-row">
         <select id="chatAccountSelect"></select>
         <input id="chatInput" placeholder="Nachricht oder /befehl" />
@@ -2146,7 +2164,7 @@ function updateChatServerSelect() {
 function refreshChatPanel() {
   applyChatStatus();
   fillChatAccountSelect();
-  redrawChatLog();
+  redrawChatLog({ toBottom: true });
   if (chatActive) updateChatStatusDisplay();
 }
 
@@ -2362,6 +2380,7 @@ async function sendChat() {
   }
   document.getElementById('chatInput').value = '';
   clearTabState();
+  scrollChatToBottom(); // eigene Nachricht: nach unten, damit man sie sieht
 }
 
 async function startAccount(username) {
@@ -2732,10 +2751,36 @@ const CHAT_HISTORY_CLIENT_LIMIT = 3000;
 
 function renderChatHistory(history) {
   chatHistoryData = history.slice();
-  redrawChatLog();
+  redrawChatLog({ toBottom: true });
 }
 
-function redrawChatLog() {
+// ---------- Mitlaufen nur, wenn man unten ist ----------
+let chatUnseen = 0;
+const chatNewBtn = document.getElementById('chatNewBtn');
+function chatAtBottom() {
+  return chatlogEl.scrollHeight - chatlogEl.scrollTop - chatlogEl.clientHeight < 40;
+}
+function updateChatNewBtn() {
+  chatNewBtn.hidden = chatUnseen === 0;
+  chatNewBtn.textContent = `↓ ${chatUnseen === 1 ? '1 neue Nachricht' : `${chatUnseen > 99 ? '99+' : chatUnseen} neue Nachrichten`}`;
+}
+function scrollChatToBottom() {
+  chatlogEl.scrollTop = chatlogEl.scrollHeight;
+  chatUnseen = 0;
+  updateChatNewBtn();
+}
+chatNewBtn.addEventListener('click', scrollChatToBottom);
+chatlogEl.addEventListener('scroll', () => {
+  if (chatUnseen && chatAtBottom()) {
+    chatUnseen = 0;
+    updateChatNewBtn();
+  }
+}, { passive: true });
+
+function redrawChatLog(opts = {}) {
+  // Wer gerade hochgescrollt ist, bleibt an seiner Stelle (z.B. beim Wechsel des Farbschemas)
+  const stick = opts.toBottom || chatAtBottom();
+  const prevTop = chatlogEl.scrollTop;
   chatlogEl.innerHTML = '';
   if (!chatActive) {
     updateChatStatusDisplay();
@@ -2755,7 +2800,8 @@ function redrawChatLog() {
     return;
   }
   filtered.forEach((m) => appendChatLine(m));
-  chatlogEl.scrollTop = chatlogEl.scrollHeight;
+  if (stick) scrollChatToBottom();
+  else chatlogEl.scrollTop = prevTop;
 }
 
 function addChatLine(msg) {
@@ -2766,8 +2812,15 @@ function addChatLine(msg) {
   if (msgServer(msg) !== chatServer || !chatActive) return;
   const term = chatSearchTerm.trim().toLowerCase();
   if (term && !msg.text.toLowerCase().includes(term)) return;
+  const stick = chatAtBottom();
   appendChatLine(msg);
-  chatlogEl.scrollTop = chatlogEl.scrollHeight;
+  if (stick) {
+    chatlogEl.scrollTop = chatlogEl.scrollHeight;
+  } else {
+    // hochgescrollt: Stelle behalten, nur Bescheid geben
+    chatUnseen++;
+    updateChatNewBtn();
+  }
 }
 
 // ---------- Chat-Farben wie in Minecraft ----------
@@ -2834,7 +2887,7 @@ function appendChatLine(msg) {
 
 document.getElementById('chatSearch').addEventListener('input', (e) => {
   chatSearchTerm = e.target.value;
-  redrawChatLog();
+  redrawChatLog({ toBottom: true });
 });
 
 document.getElementById('exportChatBtn').addEventListener('click', () => {
@@ -2908,7 +2961,7 @@ function takeChatStatus(data) {
 
 socket.on('chat-status', (data) => {
   const wasActive = takeChatStatus(data);
-  if (wasActive !== chatActive && chatActive) redrawChatLog();
+  if (wasActive !== chatActive && chatActive) redrawChatLog({ toBottom: true });
   else updateChatStatusDisplay();
 });
 
