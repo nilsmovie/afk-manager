@@ -3803,6 +3803,58 @@ app.post('/api/servers', requireManageRights, (req, res) => {
   res.json({ ok: true, server: serverForClient(r.value, req.user) });
 });
 
+// Kuerzel eines weiteren Servers aendern. Die Verbindungen dorthin heissen danach "Name@neu" -
+// alles, was am alten Schluessel haengt (Online-Zeit, Auto-Chat, Einstellungen, Chat-Verlauf ...),
+// zieht mit um. Laufende Verbindungen werden dafuer kurz getrennt und danach neu gestartet, weil
+// ihre Ereignisse noch unter dem alten Namen ankommen wuerden.
+function renameServerId(sv, newId) {
+  const oldId = sv.id;
+  const keys = extraConnections.filter((c) => c.server === oldId).map((c) => [connKey(c.username, oldId), connKey(c.username, newId)]);
+  const restart = [];
+  for (const [oldKey] of keys) {
+    const st = bots[oldKey];
+    const cs = connSettings(oldKey);
+    const active = st && (st.bot || st.pendingStart || reconnectTimers[oldKey] || pendingReconnectSet.has(oldKey) ||
+      currentlyProcessing === oldKey || bpOf(oldId).waiting.has(oldKey) || (st.status && st.status !== 'gestoppt'));
+    if (active && !(cs && cs.stopped)) restart.push(oldKey);
+    if (st) stopBot(oldKey);
+  }
+  // Server-weite Zustaende: laufende Timer gehoeren dem alten Kuerzel -> beenden; Rest umziehen
+  if (bedrockPauses[oldId]) {
+    if (bedrockPauses[oldId].timer) clearTimeout(bedrockPauses[oldId].timer);
+    delete bedrockPauses[oldId];
+  }
+  if (kickBatches[oldId]) {
+    if (kickBatches[oldId].timer) clearTimeout(kickBatches[oldId].timer);
+    delete kickBatches[oldId];
+  }
+  for (const map of [onlineState, lastMassKickAt, bedrockRoutes]) {
+    if (Object.prototype.hasOwnProperty.call(map, oldId)) {
+      map[newId] = map[oldId];
+      delete map[oldId];
+    }
+  }
+  sv.id = newId;
+  extraConnections.forEach((c) => { if (c.server === oldId) c.server = newId; });
+  for (const [oldKey, newKey] of keys) {
+    // Eine offene Code-Nachricht wird gerade (von stopBot) unter dem alten Namen abgeschlossen
+    const msg = msaCodeMessages[oldKey];
+    const queue = msaDiscordQueue[oldKey];
+    moveConnKey(oldKey, newKey);
+    if (msg) { msaCodeMessages[oldKey] = msg; delete msaCodeMessages[newKey]; }
+    if (queue) { msaDiscordQueue[oldKey] = queue; delete msaDiscordQueue[newKey]; }
+    logChat(newKey, `--- Server-Kürzel geändert: @${oldId} → @${newId} ---`);
+  }
+  saveServers();
+  saveExtraConnections();
+  saveStats();
+  for (const oldKey of restart) {
+    const newKey = connKey(connUser(oldKey), newId);
+    requestBotStart(newKey, { source: `nach der Änderung des Server-Kürzels (@${oldId} → @${newId})` });
+  }
+  return { connections: keys.length, restarted: restart.length };
+}
+
 app.put('/api/servers/:id', requireManageRights, (req, res) => {
   const sv = getServer(String(req.params.id));
   if (!sv) return res.status(404).json({ error: 'Server nicht gefunden' });
@@ -3811,6 +3863,15 @@ app.put('/api/servers/:id', requireManageRights, (req, res) => {
   }
   const r = validateServerInput(req.body, { others: servers.filter((o) => o !== sv), existing: sv });
   if (r.error) return res.status(400).json({ error: r.error });
+  // Neues Kuerzel (optional)
+  const rawId = req.body && req.body.id;
+  if (rawId !== undefined && rawId !== null && typeof rawId !== 'string') return res.status(400).json({ error: 'Ungültiges Kürzel' });
+  const wantId = typeof rawId === 'string' && cleanText(rawId) ? cleanText(rawId).toLowerCase() : sv.id;
+  if (wantId !== sv.id) {
+    if (!SERVER_ID_RE.test(wantId)) return res.status(400).json({ error: 'Kürzel: 1-24 Zeichen, nur a-z, 0-9 und - (nicht am Anfang/Ende)' });
+    if (RESERVED_SERVER_IDS.has(wantId)) return res.status(400).json({ error: `Das Kürzel "${wantId}" ist reserviert` });
+    if (servers.some((o) => o !== sv && o.id === wantId)) return res.status(400).json({ error: 'Dieses Kürzel ist schon vergeben' });
+  }
   // Ports, die bestehende Verbindungen brauchen, duerfen nicht verschwinden
   const here = extraConnections.filter((c) => c.server === sv.id);
   if (!r.value.javaPort && here.some((c) => !isBedrockAccount(c.username))) {
@@ -3825,12 +3886,20 @@ app.put('/api/servers/:id', requireManageRights, (req, res) => {
   sv.javaPort = r.value.javaPort;
   sv.bedrockPort = r.value.bedrockPort;
   const after = serverDetail(sv);
-  if (before.name === sv.name && before.detail === after) return res.json({ ok: true, server: serverForClient(sv, req.user) });
-  saveServers();
+  const oldId = sv.id;
+  const idChanged = wantId !== oldId;
+  if (before.name === sv.name && before.detail === after && !idChanged) return res.json({ ok: true, server: serverForClient(sv, req.user) });
+  let moved = null;
+  if (idChanged) moved = renameServerId(sv, wantId);
+  else saveServers();
   broadcastAccountList();
   io.emit('servers-changed');
-  auditServer(req, 'Server geändert', sv, `${before.name !== sv.name ? `Name "${before.name}" → "${sv.name}"; ` : ''}${before.detail} → ${after}`);
-  res.json({ ok: true, server: serverForClient(sv, req.user) });
+  const parts = [];
+  if (idChanged) parts.push(`Kürzel @${oldId} → @${wantId}${moved.connections ? ` (${moved.connections} Verbindung(en), ${moved.restarted} neu gestartet)` : ''}`);
+  if (before.name !== sv.name) parts.push(`Name "${before.name}" → "${sv.name}"`);
+  if (before.detail !== after) parts.push(`${before.detail} → ${after}`);
+  auditServer(req, 'Server geändert', sv, parts.join('; '));
+  res.json({ ok: true, server: serverForClient(sv, req.user), ...(moved ? { moved } : {}) });
 });
 
 app.delete('/api/servers/:id', requireManageRights, (req, res) => {
