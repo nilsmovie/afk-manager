@@ -2701,6 +2701,7 @@ function startBot(username) {
     // Boot fahren (Steuerung): rechnet die Bootsfahrt wie das Spiel und meldet die Position
     boat: ingame.createBoatDriver(bot, (m) => console.log(`[${username}] ${m}`)),
   };
+  ingame.trackWorldName(bot); // fuer die Anzeige "Welt: ..." in der Bewegung
   broadcastAccountList();
   // Microsoft-Login fertig (z.B. Code eingegeben) - der Login beim Server kommt erst danach
   if (bot._client && typeof bot._client.on === 'function') bot._client.on('session', () => msaAuthDone(username, bot));

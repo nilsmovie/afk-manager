@@ -1030,6 +1030,33 @@
     justify-content: center;
     margin-bottom: 14px;
   }
+  /* Wo ist der Account? (Dimension, Koordinaten, Blickrichtung) */
+  .pos-box {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: 4px 10px;
+    margin: -4px 0 12px;
+    font-size: 12.5px;
+    text-align: center;
+  }
+  .pos-box .pos-dim { font-weight: 600; }
+  .pos-box .pos-world { color: var(--text-sub); font-size: 11.5px; }
+  .pos-box .pos-coords {
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-size: 12.5px;
+    padding: 3px 9px;
+    border-radius: 7px;
+    background: var(--chatlog-bg);
+    border: 1px solid var(--card-border);
+    color: var(--text);
+    cursor: pointer;
+    font-variant-numeric: tabular-nums;
+  }
+  .pos-box .pos-coords:hover { border-color: var(--accent); }
+  .pos-box .pos-face, .pos-box .pos-alt { color: var(--text-sub); font-size: 11.5px; }
+  .pos-box .pos-alt { flex-basis: 100%; }
   .vehicle-hint {
     font-size: 12px;
     color: var(--text-sub);
@@ -1345,6 +1372,7 @@
       <div class="card">
         <h2>Bewegung</h2>
         <select id="controlAccountSelect" class="control-account-select" title="Welcher Account? (gilt auch fürs Inventar)"></select>
+        <div class="pos-box" id="posBox" hidden></div>
         <div class="vehicle-hint" id="vehicleHint" hidden></div>
 
         <div class="control-grid">
@@ -3595,6 +3623,56 @@ document.addEventListener('keydown', (e) => {
   winClose();
 });
 
+// ---------- Position in der Bewegung: Dimension, Welt, Koordinaten, Blickrichtung ----------
+const posBox = document.getElementById('posBox');
+const DIM_LABEL = { overworld: '🌍 Oberwelt', overworld_caves: '🌍 Oberwelt', the_nether: '🔥 Nether', the_end: '🌌 Ende' };
+const STANDARD_WORLD = { overworld: ['overworld', 'world'], overworld_caves: ['overworld', 'world'], the_nether: ['the_nether', 'world_nether'], the_end: ['the_end', 'world_the_end'] };
+const FACING = ['Süden (+Z)', 'Südosten', 'Osten (+X)', 'Nordosten', 'Norden (−Z)', 'Nordwesten', 'Westen (−X)', 'Südwesten'];
+function fmtCoord(v) { return Math.floor(v).toLocaleString('de-DE').replace('-', '−'); }
+function facingOf(yaw) {
+  // wie die Physik von mineflayer: vorwärts = (−sin(yaw), −cos(yaw)), 0 = Norden
+  const dx = -Math.sin(yaw);
+  const dz = -Math.cos(yaw);
+  const sector = Math.round(Math.atan2(dx, dz) / (Math.PI / 4));
+  return FACING[((sector % 8) + 8) % 8];
+}
+let posLast = null;
+function renderPosition(d) {
+  const p = d && d.position;
+  if (!p) { posBox.hidden = true; posBox.innerHTML = ''; posLast = null; return; }
+  const dim = d.dimension || {};
+  const type = dim.type || '';
+  const world = dim.world || '';
+  const label = DIM_LABEL[type] || `🗺️ ${type || world || 'Unbekannte Dimension'}`;
+  const standard = !world || (STANDARD_WORLD[type] || []).includes(world) || world === type;
+  const coords = `X ${fmtCoord(p.x)} · Y ${fmtCoord(p.y)} · Z ${fmtCoord(p.z)}`;
+  let alt = '';
+  if (standard && (type === 'overworld' || type === 'overworld_caves')) alt = `Im Nether wäre das X ${fmtCoord(p.x / 8)} · Z ${fmtCoord(p.z / 8)}`;
+  else if (standard && type === 'the_nether') alt = `In der Oberwelt wäre das X ${fmtCoord(p.x * 8)} · Z ${fmtCoord(p.z * 8)}`;
+  const html = `<span class="pos-dim">${escapeHtml(label)}</span>` +
+    (world && !standard ? `<span class="pos-world">Welt: ${escapeHtml(world)}</span>` : '') +
+    `<button type="button" class="pos-coords" title="Koordinaten kopieren" data-copy="${escapeHtml(`${Math.floor(p.x)} ${Math.floor(p.y)} ${Math.floor(p.z)}`)}">${escapeHtml(coords)}</button>` +
+    (typeof p.yaw === 'number' ? `<span class="pos-face">Blick: ${escapeHtml(facingOf(p.yaw))}</span>` : '') +
+    (alt ? `<span class="pos-alt">${escapeHtml(alt)}</span>` : '');
+  if (html !== posLast) {
+    posLast = html;
+    posBox.innerHTML = html;
+  }
+  posBox.hidden = false;
+}
+posBox.addEventListener('click', async (e) => {
+  const btn = e.target.closest('.pos-coords');
+  if (!btn) return;
+  const text = btn.dataset.copy || '';
+  try {
+    await navigator.clipboard.writeText(text);
+    btn.textContent = 'Kopiert ✓';
+  } catch (err) {
+    btn.textContent = text; // ohne Zwischenablage: wenigstens zum Abschreiben
+  }
+  posLast = null; // beim nächsten Abruf wieder die Koordinaten zeigen
+});
+
 async function loadInventory(force = false) {
   clearTimeout(invTimer);
   const key = invAccountSelect.value;
@@ -3602,6 +3680,7 @@ async function loadInventory(force = false) {
     invBody.hidden = true;
     invStatus.textContent = 'Kein Java-Account vorhanden.';
     vehicleHint.hidden = true;
+    renderPosition(null);
     return;
   }
   let delay = invData && invData.window ? 1000 : 1500;
@@ -3618,16 +3697,23 @@ async function loadInventory(force = false) {
         invData = null;
         invRaw = '';
         vehicleHint.hidden = true;
+        renderPosition(null);
         delay = 4000;
-      } else if (text !== invRaw) {
-        invRaw = text;
-        invData = JSON.parse(text);
-        if (invSelected !== null && (!invData.slots[invSelected] || invData.window || invData.cursor)) invSelected = null;
-        if (!invData.cursor) invCursorTarget = null;
-        if (!invData.window) winShownId = null;
-        invStatus.textContent = '';
-        invBody.hidden = false;
-        renderInventory();
+      } else {
+        const parsed = JSON.parse(text);
+        renderPosition(parsed); // ändert sich beim Laufen ständig - das Inventar nur neu zeichnen, wenn es sich ändert
+        const { position, dimension, ...rest } = parsed;
+        const restRaw = JSON.stringify(rest);
+        if (restRaw !== invRaw) {
+          invRaw = restRaw;
+          invData = parsed;
+          if (invSelected !== null && (!invData.slots[invSelected] || invData.window || invData.cursor)) invSelected = null;
+          if (!invData.cursor) invCursorTarget = null;
+          if (!invData.window) winShownId = null;
+          invStatus.textContent = '';
+          invBody.hidden = false;
+          renderInventory();
+        }
       }
     } catch (e) {
       delay = 4000;
@@ -3649,6 +3735,7 @@ function syncInvAccountSelect() {
 let invLoadedKey = null;
 function accountChangedForInventory() {
   invLoadedKey = invAccountSelect.value;
+  renderPosition(null); // bis die Daten des neuen Accounts da sind
   invSelected = null;
   invRaw = '';
   invData = null;

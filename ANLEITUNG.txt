@@ -181,6 +181,10 @@ Gut zu wissen:
  - Rechts im Dashboard: Live-Chat (über den gewählten Account schreiben),
    "Bewegung" (Laufen, Springen, Schleichen, Klicks, Absteigen) und "Inventar".
    Beide zeigen immer denselben Account (nur Java-Accounts).
+ - Oben in der Bewegung steht, wo der Account gerade ist: Dimension (Oberwelt,
+   Nether, Ende bzw. der Name einer eigenen Welt), Koordinaten wie mit F3 und
+   die Blickrichtung. In Oberwelt/Nether steht die umgerechnete Stelle in der
+   anderen Dimension dabei. Ein Klick auf die Koordinaten kopiert sie.
  - Sitzt der Account in einem Boot, fährt W/S das Boot und A/D lenkt. Das Spiel
    lässt den Spieler die Bootsfahrt selbst berechnen; der Manager rechnet sie
    nach (Wasser, Eis, Land) und hält an Blöcken an. Server mit strengem

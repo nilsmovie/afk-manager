@@ -448,6 +448,43 @@ function windowSnapshot(bot, formatTitle) {
   };
 }
 
+// ---------- Wo ist der Account? (Dimension, Welt, Koordinaten) ----------
+const NAME_RE = /^[a-z0-9_.\-/:]{1,64}$/i;
+function cleanName(v) {
+  if (typeof v !== 'string') return null;
+  const n = v.replace(/^minecraft:/, '');
+  return NAME_RE.test(n) ? n : null;
+}
+// Name der Welt aus login/respawn merken (mineflayer merkt sich nur die Art der Dimension) -
+// auf Servern mit mehreren Welten (Lobby, Minispiele ...) heisst sie z.B. "hub"
+function trackWorldName(bot) {
+  const c = bot && bot._client;
+  if (!c || typeof c.on !== 'function') return;
+  const take = (packet) => {
+    const w = (packet && (packet.worldState || packet)) || {};
+    const n = cleanName(w.name || w.worldName);
+    if (n) bot.__afkWorld = n;
+  };
+  c.on('login', take);
+  c.on('respawn', take);
+}
+function positionInfo(bot) {
+  const e = bot && bot.entity;
+  const p = e && e.position;
+  if (!p || !Number.isFinite(p.x) || !Number.isFinite(p.y) || !Number.isFinite(p.z)) return null;
+  const r1 = (v) => Math.round(v * 10) / 10;
+  return {
+    x: r1(p.x), y: r1(p.y), z: r1(p.z),
+    yaw: Number.isFinite(e.yaw) ? Math.round(e.yaw * 1000) / 1000 : null,
+  };
+}
+function dimensionInfo(bot) {
+  const type = cleanName(bot && bot.game && bot.game.dimension);
+  const world = cleanName(bot && bot.__afkWorld);
+  if (!type && !world) return null;
+  return { type, world };
+}
+
 function inventorySnapshot(bot, opts = {}) {
   const slots = [];
   const src = (bot.inventory && bot.inventory.slots) || [];
@@ -464,6 +501,8 @@ function inventorySnapshot(bot, opts = {}) {
     inBoat: isBoatEntity(v),
     health: typeof bot.health === 'number' ? Math.round(bot.health * 10) / 10 : null,
     food: typeof bot.food === 'number' ? bot.food : null,
+    position: positionInfo(bot),
+    dimension: dimensionInfo(bot),
     icons: iconsVersion(),
   };
 }
@@ -697,6 +736,9 @@ async function craftItem(bot, itemId, times) {
 }
 
 module.exports = {
+  trackWorldName,
+  positionInfo,
+  dimensionInfo,
   inventoryClick,
   cursorBack,
   isBoatEntity,
