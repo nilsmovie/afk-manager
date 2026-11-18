@@ -1,5 +1,14 @@
 # Änderungen
 
+## Discord aufräumen (November 2026)
+
+- Neuer Befehl `npm run discord-aufraeumen`: löscht alle Nachrichten des AFK-Managers (Bot und
+  seine Webhooks aus der .env) in einem Kanal und Zeitraum – z.B. nach einer Nacht voller Kick-
+  und „Alle wieder online“-Meldungen. Nachrichten von Menschen und anderen Bots bleiben stehen.
+- Ohne `--loeschen` zeigt er nur an, was er löschen würde; mit `--loeschen` fragt er nochmal nach.
+- Mit dem Bot-Recht „Nachrichten verwalten“ in Hunderterpaketen, sonst einzeln; Nachrichten der
+  Webhooks werden über den Webhook selbst gelöscht. Siehe ANLEITUNG, Abschnitt 7c.
+
 ## Position in der Bewegung (November 2026)
 
 - Die Bewegung zeigt jetzt, wo der ausgewählte Account ist: **Dimension** (🌍 Oberwelt, 🔥 Nether,

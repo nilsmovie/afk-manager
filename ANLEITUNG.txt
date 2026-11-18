@@ -388,6 +388,19 @@ b) Bot (für Befehle und Buttons):
    (Zeile mit [Diagnose]): "kam zu spät an" = Programm war ausgelastet, einfach
    nochmal; "von einer ANDEREN Instanz beantwortet" = der AFK-Manager läuft doppelt.
 
+c) Aufräumen: viele Meldungen auf einmal löschen
+   Hat der Manager z.B. eine Nacht lang Kick- und Online-Meldungen geschickt,
+   löscht dieser Befehl alle Nachrichten des Managers (Bot und seine Webhooks
+   aus der .env) in einem Kanal und Zeitraum. Nachrichten von Menschen und
+   anderen Bots bleiben immer stehen. Zuerst ohne --loeschen ausführen - dann
+   zeigt er nur, was er löschen würde:
+      npm run discord-aufraeumen -- --kanal KANAL-ID --von "18.11.2026 00:01" --bis "18.11.2026 05:00"
+   Passt alles, denselben Befehl mit --loeschen am Ende (er fragt nochmal).
+   Zeiten in der Ortszeit des Rechners (sonst TZ=Europe/Berlin davor setzen).
+   Mit dem Bot-Recht "Nachrichten verwalten" geht es in Hunderterpaketen,
+   sonst löscht er einzeln (dauert bei Tausenden Nachrichten eine Weile).
+   Der laufende Manager muss dafür nicht gestoppt werden.
+
 Nach Änderungen an der .env das Programm neu starten.
 
 

@@ -7,7 +7,8 @@
   "scripts": {
     "start": "node server.js",
     "test": "node test/run.js",
-    "bilder": "node tools/minecraft-bilder.js"
+    "bilder": "node tools/minecraft-bilder.js",
+    "discord-aufraeumen": "node tools/discord-aufraeumen.js"
   },
   "dependencies": {
     "bedrock-protocol": "^3.61.0",
