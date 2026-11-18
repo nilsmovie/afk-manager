@@ -1,5 +1,14 @@
 # Änderungen
 
+## Position in der Bewegung (November 2026)
+
+- Die Bewegung zeigt jetzt, wo der ausgewählte Account ist: **Dimension** (🌍 Oberwelt, 🔥 Nether,
+  🌌 Ende; auf Servern mit eigenen Welten auch deren Name, z.B. „Welt: hub“), **Koordinaten**
+  (Blockkoordinaten wie mit F3) und **Blickrichtung**.
+- In Oberwelt und Nether steht die passende Stelle in der anderen Dimension dabei (÷8 bzw. ×8).
+- Klick auf die Koordinaten kopiert sie („123 64 -46“).
+- Das Inventar wird beim Laufen nicht mehr ständig neu gezeichnet (nur wenn es sich ändert).
+
 ## Chat: Hochscrollen bleibt stehen (November 2026)
 
 - Wer im Chat hochscrollt, wird von neuen Nachrichten nicht mehr nach unten geworfen. Stattdessen
