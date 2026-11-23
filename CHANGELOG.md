@@ -1,5 +1,15 @@
 # Änderungen
 
+## Menüs am Handy: erst lesen, dann klicken (November 2026)
+
+- Auf iPhone und iPad hat ein Tippen auf ein Item in einem Menü (z.B. /warp) sofort geklickt –
+  man landete auf der nächsten Seite, bevor man lesen konnte, was das Item macht. Ursache: Safari
+  meldet nach einem Tippen teils „Maus“. Jetzt zählt, womit wirklich gedrückt wurde: Mit dem Finger
+  wählt ein Tippen das Item nur aus (wie mit der Maus drüberfahren) – unten stehen Name bzw.
+  eigener Name, Verzauberungen und Beschreibung, und man wählt per Knopf Linksklick, Rechtsklick
+  oder Abbrechen. Mit der Maus wird weiter direkt geklickt.
+- Gilt genauso im normalen Inventar (Item an der Maus ablegen).
+
 ## Discord aufräumen (November 2026)
 
 - Neuer Befehl `npm run discord-aufraeumen`: löscht alle Nachrichten des AFK-Managers (Bot und

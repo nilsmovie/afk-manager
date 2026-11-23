@@ -3347,8 +3347,30 @@ async function invCursorDrop() {
   const ok = await showConfirm(`${c.count} × ${c.label}${c.custom ? ` „${c.custom}“` : ''} wegwerfen?`, { title: 'Item wegwerfen', okLabel: 'Wegwerfen', danger: true });
   if (ok) invClick(-999, 0);
 }
-let invPointer = 'mouse';
-invBody.addEventListener('pointerdown', (e) => { invPointer = e.pointerType || 'mouse'; });
+// ---------- Maus oder Finger? ----------
+// Mit der Maus wird direkt geklickt, mit dem Finger erst ausgewählt (Name/Beschreibung lesen) und
+// dann per Knopf geklickt. Das Klick-Ereignis selbst ist dafür unzuverlässig (Safari auf iPhone/
+// iPad meldet nach einem Tippen teils "mouse") - deshalb zählt, womit zuletzt wirklich gedrückt
+// wurde: Berührung (touchstart, pointerdown "touch"/"pen") oder echte Maus (ohne Berührung davor).
+const PRIMARY_TOUCH = !!(window.matchMedia && window.matchMedia('(hover: none)').matches);
+let lastInput = PRIMARY_TOUCH ? 'touch' : 'mouse';
+let lastTouchAt = 0;
+(() => {
+  const opt = { capture: true, passive: true };
+  const touched = () => { lastInput = 'touch'; lastTouchAt = Date.now(); };
+  document.addEventListener('touchstart', touched, opt);
+  document.addEventListener('pointerdown', (e) => {
+    const t = e.pointerType || '';
+    if (t === 'touch' || t === 'pen') touched();
+    else if (t === 'mouse' && Date.now() - lastTouchAt > 1000) lastInput = 'mouse';
+  }, opt);
+  // echte Maus bewegt (nicht die Ersatz-Ereignisse kurz nach einer Berührung)
+  document.addEventListener('mousemove', () => { if (Date.now() - lastTouchAt > 1000 && !PRIMARY_TOUCH) lastInput = 'mouse'; }, opt);
+})();
+function touchInput() {
+  return lastInput === 'touch' || Date.now() - lastTouchAt < 1000;
+}
+
 invBody.addEventListener('contextmenu', (e) => {
   const el = e.target.closest('#invNormal .slot[data-slot]');
   if (!el || !invData || invData.window) return;
@@ -3356,7 +3378,7 @@ invBody.addEventListener('contextmenu', (e) => {
   if (!(slot >= 0)) return;
   e.preventDefault();
   if (invBusy) return;
-  if (invPointer === 'mouse') invClick(slot, 1); // Rechtsklick wie im Spiel
+  if (!touchInput()) invClick(slot, 1); // Rechtsklick wie im Spiel
   else if (invData.cursor) { invCursorTarget = slot; renderInventory(); } // langes Drücken am Handy
   else if (invData.slots[slot]) invSelect(slot);
 });
@@ -3367,8 +3389,7 @@ invBody.addEventListener('click', (e) => {
   if (!(slot >= 0)) return; // Bild in der Rezeptliste
   if (invData.cursor) {
     // Item hängt an der Maus: mit der Maus direkt ablegen, am Handy erst fragen wie
-    const pt = typeof e.pointerType === 'string' && e.pointerType ? e.pointerType : invPointer;
-    if (pt === 'mouse') invClick(slot, 0);
+    if (!touchInput()) invClick(slot, 0);
     else { invCursorTarget = invCursorTarget === slot ? null : slot; renderInventory(); }
     return;
   }
@@ -3431,7 +3452,6 @@ const PUA_ONE = /[\uE000-\uF8FF\u{F0000}-\u{FFFFD}\u{100000}-\u{10FFFD}]/u;
 const stripPua = (v) => String(v ?? '').replace(PUA_RE, '');
 let winSelected = null; // Platz, für den unten Links/Rechts/Abbrechen steht (Touch)
 let winHover = null; // Platz unter der Maus (nur Anzeige)
-let winPointer = 'mouse';
 let winShownId = null;
 
 function winType(w) { return String(w.type || '').replace(/^minecraft:/, ''); }
@@ -3585,23 +3605,22 @@ document.getElementById('winCloseBtn').addEventListener('click', winClose);
     const el = e.target.closest('.slot[data-wslot]');
     return el && box.contains(el) ? Number(el.dataset.wslot) : null;
   };
-  box.addEventListener('pointerdown', (e) => { winPointer = e.pointerType || 'mouse'; });
   box.addEventListener('click', (e) => {
     const slot = slotOf(e);
     if (slot === null || !invData || !invData.window) return;
-    const pt = typeof e.pointerType === 'string' && e.pointerType ? e.pointerType : winPointer;
-    if (pt === 'mouse') winClick(slot, 0);
-    else winSelect(winSelected === slot ? null : slot);
+    // Finger: nur "mit der Maus drübergehen" - unten Name, Verzauberung, Beschreibung und die Knöpfe
+    if (touchInput()) winSelect(winSelected === slot ? null : slot);
+    else winClick(slot, 0);
   });
   box.addEventListener('contextmenu', (e) => {
     const slot = slotOf(e);
     if (slot === null || !invData || !invData.window) return;
     e.preventDefault();
-    if (winPointer === 'mouse') winClick(slot, 1);
-    else winSelect(slot); // langes Drücken am Handy
+    if (touchInput()) winSelect(slot); // langes Drücken am Handy
+    else winClick(slot, 1);
   });
   box.addEventListener('mouseover', (e) => {
-    if (winPointer !== 'mouse' || winSelected !== null) return;
+    if (touchInput() || winSelected !== null) return;
     const slot = slotOf(e);
     if (slot !== null && slot !== winHover) { winHover = slot; renderWinDetail(); }
   });

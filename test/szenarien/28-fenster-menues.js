@@ -149,6 +149,19 @@ module.exports = {
         await p.waitForTimeout(700)
         t.chk('Browser: Rechtsklick mit der Maus geht direkt', b.klicks.slice(anzahl).some((x) => x[0] === 20 && x[1] === 1), b.klicks.slice(anzahl))
         t.chk('Browser: Rechtsklick legt eins ab', b.currentWindow.slots[20] && b.currentWindow.slots[20].count === 1)
+        // Wie Safari auf iPhone/iPad: nach einem Tippen meldet das Klick-Ereignis "mouse" -
+        // trotzdem nur auswählen (Name/Beschreibung lesen), nicht klicken
+        const vorIos = b.klicks.length
+        await p.evaluate(() => {
+          const el = document.querySelector('#invWindow .slot[data-wslot="11"]')
+          el.dispatchEvent(new Event('touchstart', { bubbles: true }))
+          el.dispatchEvent(new PointerEvent('pointerdown', { pointerType: 'mouse', bubbles: true }))
+          el.dispatchEvent(new PointerEvent('click', { pointerType: 'mouse', bubbles: true }))
+        })
+        await p.waitForTimeout(200)
+        const iosKnoepfe = await p.$$eval('#winDetail button', (els) => els.map((x) => x.textContent.trim()))
+        t.chk('iPhone/iPad (Klick meldet "mouse"): nur auswählen, Name und Knöpfe', b.klicks.length === vorIos && iosKnoepfe.join() === 'Linksklick,Rechtsklick,Abbrechen' && /Spawn/.test(await p.textContent('#winDetail')) && /Klicke zum Teleportieren/.test(await p.textContent('#winDetail')), [b.klicks.slice(vorIos), iosKnoepfe])
+        await p.click('#winDetail button:has-text("Abbrechen")')
         await p.focus('#invAccountSelect')
         await p.keyboard.press('Escape')
         await p.waitForTimeout(400)
@@ -181,6 +194,12 @@ module.exports = {
         await p.tap('#winDetail button:has-text("Linksklick")')
         await p.waitForTimeout(700)
         t.chk('Handy: Linksklick über den Knopf legt ab', b.currentWindow.slots[22] && b.currentWindow.slots[22].count === 16 && !b.currentWindow.selectedItem)
+        // Handy/Tablet ohne Maus: auch ein Klick-Ereignis, das "mouse" meldet, wählt nur aus
+        const vorHandy = b.klicks.length
+        await p.evaluate(() => document.querySelector('#invWindow .slot[data-wslot="11"]').dispatchEvent(new PointerEvent('click', { pointerType: 'mouse', bubbles: true })))
+        await p.waitForTimeout(200)
+        t.chk('Handy: Klick meldet "mouse" -> trotzdem nur auswählen', b.klicks.length === vorHandy && (await p.$$('#winDetail button')).length === 3, b.klicks.slice(vorHandy))
+        await p.tap('#winDetail button:has-text("Abbrechen")')
         await p.tap('#winCloseBtn')
         await p.waitForTimeout(900)
         t.chk('Handy: Schließen-Knopf', b.currentWindow === null)
