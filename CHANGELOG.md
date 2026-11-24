@@ -1,5 +1,20 @@
 # Änderungen
 
+## iPhone: kein Hineinzoomen, kein Passwort-Vorschlag (November 2026)
+
+- Auf dem iPhone ist Safari beim Neuladen ins Feld „Account hinzufügen“ gesprungen, hat
+  hineingezoomt und das gespeicherte Passwort bzw. „Benutzernamen ausfüllen“ vorgeschlagen.
+  Das Feld heißt jetzt „Minecraft-Name“, ist für Safari und Passwort-Apps klar kein Login-Feld
+  (autocomplete aus, kein „username“ im Namen, kein Formular), und Enter fügt den Account hinzu.
+- Alle Eingabefelder und Auswahllisten (auch Farbschema und Schriftart) haben auf Handys und
+  Touch-Geräten 16px Schrift – darunter zoomt Safari beim Antippen hinein. Am Computer bleibt alles
+  wie bisher. Mit zwei Fingern zoomen geht weiterhin.
+- Login-Seite: echtes Formular mit `autocomplete="username"` und `"current-password"`, damit der
+  Schlüsselbund nur dort Namen und Passwort einsetzt. Der Cursor springt nur am Computer von
+  selbst ins Namensfeld, auf dem Handy nicht. Nach dem Anmelden wird das Dashboard neu geladen –
+  das Login-Formular gibt es dort gar nicht.
+- Verwaltung: „Benutzer anlegen“ und „Neues Passwort“ schlagen kein gespeichertes Passwort mehr vor.
+
 ## Tagesbalken als Zeitleiste (November 2026)
 
 - Der Balken unter jedem Account ist jetzt eine Zeitleiste des Tages: links 0 Uhr, rechts 24 Uhr.
