@@ -65,7 +65,12 @@ process.env.HOME = lauf
 process.env.APPDATA = lauf
 
 // ---------- Einstellungen ----------
-const PORT = String(3900 + (process.pid % 900))
+// fetch() und Browser verweigern ein paar Ports grundsätzlich ("bad ports", z.B. 4045) - dann
+// sah es so aus, als würde der Server nicht starten. Die werden übersprungen.
+const GESPERRTE_PORTS = new Set([4045, 4190])
+let port = 3900 + (process.pid % 900)
+while (GESPERRTE_PORTS.has(port)) port++
+const PORT = String(port)
 Object.assign(process.env, {
   PORT,
   DASHBOARD_PASSWORD: 'testpw',

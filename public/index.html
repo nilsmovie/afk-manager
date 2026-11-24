@@ -1249,6 +1249,10 @@
 
   @media (max-width: 480px) {
     .send-row { flex-wrap: wrap; }
+    /* Suche + Server-Auswahl im Chat-Kopf: Suchfeld schrumpft statt die Seite zu verbreitern */
+    .chat-tools { flex: 1 1 100%; min-width: 0; }
+    .chat-tools input { flex: 1 1 0; width: 0; min-width: 0; }
+    #chatServerSelect { flex: 0 1 auto; min-width: 0; }
 
     .send-row input { flex: 1 1 100%; order: -1; margin-bottom: 6px; }
   }
