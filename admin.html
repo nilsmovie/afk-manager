@@ -267,6 +267,12 @@
   .tpl-add input.tpl-delay-in { flex: 1 1 90px; }
   .panel-title { font-size: 12.5px; font-weight: 600; margin: 12px 0 4px; }
   .panel-title:first-of-type { margin-top: 0; }
+  /* iPhone/iPad: Safari zoomt beim Antippen in jedes Eingabefeld mit Schrift unter 16px hinein
+     (und bleibt gezoomt). Auf Handys und Touch-Geräten haben deshalb alle Felder und Auswahllisten
+     16px - auch Farbschema und Schriftart. Zoomen mit zwei Fingern bleibt erlaubt. */
+  @media (max-width: 768px), (hover: none) {
+    input, select, textarea { font-size: 16px !important; }
+  }
 </style>
 </head>
 <body>
@@ -288,9 +294,9 @@
     <h2>Neuen Benutzer anlegen</h2>
     <div class="error-msg" id="createError"></div>
     <label class="field-label">Benutzername</label>
-    <input id="newUserName" placeholder="z.B. Max" />
+    <input id="newUserName" placeholder="z.B. Max" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" data-lpignore="true" data-1p-ignore />
     <label class="field-label">Passwort</label>
-    <input id="newUserPassword" type="password" placeholder="Mindestens 8 Zeichen" />
+    <input id="newUserPassword" type="password" placeholder="Mindestens 8 Zeichen" autocomplete="new-password" data-lpignore="true" data-1p-ignore />
     <label class="field-label">Rolle</label>
     <select id="newUserRole">
       <option value="user">User (nur zugewiesene Accounts)</option>
@@ -603,7 +609,7 @@ function renderUserList() {
         <div class="error-msg" id="editError-${escapeHtml(u.username)}"></div>
         <div class="success-msg" id="editSuccess-${escapeHtml(u.username)}"></div>
         <label class="field-label">Neues Passwort (leer lassen, um es nicht zu ändern)</label>
-        <input type="password" id="editPassword-${escapeHtml(u.username)}" placeholder="Neues Passwort" />
+        <input type="password" id="editPassword-${escapeHtml(u.username)}" placeholder="Neues Passwort" autocomplete="new-password" data-lpignore="true" data-1p-ignore />
         ${u.role === 'user' ? `
           <label class="field-label">Sichtbare/bedienbare Minecraft-Accounts</label>
           <div class="account-checklist" id="editChecklist-${escapeHtml(u.username)}"></div>

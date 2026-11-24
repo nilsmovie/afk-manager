@@ -1249,6 +1249,10 @@
 
   @media (max-width: 480px) {
     .send-row { flex-wrap: wrap; }
+    /* Suche + Server-Auswahl im Chat-Kopf: Suchfeld schrumpft statt die Seite zu verbreitern */
+    .chat-tools { flex: 1 1 100%; min-width: 0; }
+    .chat-tools input { flex: 1 1 0; width: 0; min-width: 0; }
+    #chatServerSelect { flex: 0 1 auto; min-width: 0; }
 
     .send-row input { flex: 1 1 100%; order: -1; margin-bottom: 6px; }
   }
@@ -1315,6 +1319,12 @@
   @media (prefers-reduced-motion: reduce) {
     .msg-overlay.open, .msg-box { animation: none; }
   }
+  /* iPhone/iPad: Safari zoomt beim Antippen in jedes Eingabefeld mit Schrift unter 16px hinein
+     (und bleibt gezoomt). Auf Handys und Touch-Geräten haben deshalb alle Felder und Auswahllisten
+     16px - auch Farbschema und Schriftart. Zoomen mit zwei Fingern bleibt erlaubt. */
+  @media (max-width: 768px), (hover: none) {
+    input, select, textarea { font-size: 16px !important; }
+  }
 </style>
 </head>
 
@@ -1379,7 +1389,11 @@
   <div>
     <div class="card" id="addAccountCard">
       <h2>Account hinzufügen</h2>
-      <input id="newUsername" placeholder="Minecraft-Benutzername" />
+      <!-- Bewusst kein "username"/"login" im Namen und kein Passwortfeld auf der Seite: sonst hält
+           Safari das für ein Login-Feld, schlägt das gespeicherte Passwort vor und springt hinein -->
+      <input type="text" id="mcNameInput" name="mc-ingame-name" placeholder="Minecraft-Name" maxlength="32"
+             autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false"
+             enterkeyhint="done" data-lpignore="true" data-1p-ignore data-form-type="other" />
       <button id="addAccountBtn">Hinzufügen</button>
       <div class="sub" style="margin-top:8px;">
         Nach dem Start erscheint hier oben ein Microsoft-Login-Code, den du bestätigen musst.
@@ -2309,8 +2323,9 @@ function toggleConnAdd(username) {
   renderAccounts(lastAccountsList);
 }
 
+const mcNameInput = document.getElementById('mcNameInput');
 document.getElementById('addAccountBtn').addEventListener('click', async () => {
-  const username = document.getElementById('newUsername').value.trim();
+  const username = mcNameInput.value.trim();
   if (!username) return;
   const res = await fetch('/api/accounts', {
     method: 'POST',
@@ -2319,7 +2334,10 @@ document.getElementById('addAccountBtn').addEventListener('click', async () => {
   });
   const data = await res.json();
   if (!res.ok) showMessage(data.error || 'Fehler');
-  document.getElementById('newUsername').value = '';
+  mcNameInput.value = '';
+});
+mcNameInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') { e.preventDefault(); document.getElementById('addAccountBtn').click(); }
 });
 
 document.getElementById('sendChatBtn').addEventListener('click', sendChat);
