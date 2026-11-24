@@ -161,9 +161,16 @@ Buttons pro Account:
                       bestehende Accounts behalten ihre Einstellung.
    ✕                  Account entfernen (löscht auch den gespeicherten Login)
 
-Balken unter dem Account: der ganze Balken ist ein Tag (24 Stunden), der
-gefüllte Teil zeigt, wie lange der Account heute online war (12 h = halb voll).
-Die feinen Striche stehen bei 6, 12 und 18 Stunden. Rechts steht die Zeit.
+Balken unter dem Account (Zeitleiste von heute): links ist 0 Uhr, rechts 24 Uhr,
+die feinen Striche stehen bei 6, 12 und 18 Uhr. Farbig markiert ist, zu welcher
+Uhrzeit der Account online war - war er zwischendurch weg (Kick, Stop, Neustart
+des Managers), ist dort eine Lücke. Der dunklere Teil ist schon vorbei, der
+helle Teil kommt noch, der senkrechte Strich ist "jetzt". Unterbrechungen unter
+einer Minute werden nicht als Lücke gezeigt. Antippen/Anklicken klappt die
+Uhrzeiten als Liste auf (z.B. "Online: 0:00-6:12, 8:03-11:00, seit 11:30").
+Rechts steht die Online-Zeit von heute zusammen. Jede Verbindung auf einem
+weiteren Server hat ihre eigene, schmalere Zeitleiste. Um Mitternacht beginnt
+die Zeitleiste neu; sie übersteht Neustarts (statistik.json).
 
 Gut zu wissen:
  - Loggst du dich mit einem Account selbst im Spiel ein, fliegt der Bot raus

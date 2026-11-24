@@ -24,9 +24,11 @@ const RealDate = Date
 const realNow = RealDate.now.bind(RealDate)
 const t0 = realNow()
 // Testuhr startet immer um 10:00 Uhr (Zeitraffer laeuft sonst je nach echter Uhrzeit ueber
-// Mitternacht - dann setzt die Tagesstatistik mitten im Test zurueck)
+// Mitternacht - dann setzt die Tagesstatistik mitten im Test zurueck). "uhrzeit: 20" startet um
+// 20 Uhr, "uhrzeit: [10, 13]" in Phase 1 um 10 und in Phase 2 um 13 Uhr.
 const startUhr = new RealDate(t0)
-startUhr.setHours(szenario.uhrzeit != null ? szenario.uhrzeit : 10, 0, 0, 0)
+const uhrzeit = Array.isArray(szenario.uhrzeit) ? szenario.uhrzeit[PHASE - 1] : szenario.uhrzeit
+startUhr.setHours(uhrzeit != null ? uhrzeit : 10, 0, 0, 0)
 let sprung = startUhr.getTime() - t0
 const fakeNow = () => Math.round(t0 + (realNow() - t0) * SCALE + sprung)
 class FakeDate extends RealDate {
