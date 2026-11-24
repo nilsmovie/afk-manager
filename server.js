@@ -1859,7 +1859,7 @@ function attemptSequentialStart(username) {
 let chatHistory = []; // [{ username, text, ts }] - nur vom primaeren Account
 
 // ---------- Uptime-Tracking (wie lange ein Account heute schon online war) ----------
-const accountStats = {}; // username -> { totalMs, sessionStart, day }
+const accountStats = {}; // username -> { totalMs, sessionStart, day, segments: [[start, ende], ...] }
 
 function getTodayStr(date) {
   // Bewusst LOKALE Zeit statt toISOString() (=UTC): sonst wird der Tageszaehler mitten in
@@ -1873,9 +1873,64 @@ function getTodayStr(date) {
 
 function ensureStats(username) {
   if (!accountStats[username]) {
-    accountStats[username] = { totalMs: 0, sessionStart: null, day: getTodayStr() };
+    accountStats[username] = { totalMs: 0, sessionStart: null, day: getTodayStr(), segments: [] };
   }
+  if (!Array.isArray(accountStats[username].segments)) accountStats[username].segments = [];
   return accountStats[username];
+}
+
+// ---------- Zeitleiste: wann war die Verbindung heute online? ----------
+// Abgeschlossene Online-Zeiten von heute als [start, ende] (ms). Lücken unter einer Minute werden
+// zusammengefasst (sieht man im Balken eh nicht); höchstens 150 Abschnitte - darüber wird die
+// kleinste Lücke geschlossen, damit eine Nacht voller Reconnects die Liste nicht aufbläht.
+const SEG_MERGE_GAP_MS = 60 * 1000;
+const SEG_MAX = 150;
+function addSegment(s, start, end) {
+  if (!(end > start)) return;
+  const segs = s.segments || (s.segments = []);
+  const last = segs[segs.length - 1];
+  if (last && start - last[1] <= SEG_MERGE_GAP_MS) last[1] = Math.max(last[1], end);
+  else segs.push([start, end]);
+  while (segs.length > SEG_MAX) {
+    let best = 1;
+    let gap = Infinity;
+    for (let i = 1; i < segs.length; i++) {
+      const g = segs[i][0] - segs[i - 1][1];
+      if (g < gap) { gap = g; best = i; }
+    }
+    segs[best - 1][1] = Math.max(segs[best - 1][1], segs[best][1]);
+    segs.splice(best, 1);
+  }
+}
+function startOfToday(now = Date.now()) {
+  const d = new Date(now);
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+}
+// Uhrzeit als Sekunden seit 0 Uhr (Wanduhr, auch an Tagen mit Zeitumstellung: 13:00 ist immer 13:00)
+function wallSec(ms) {
+  const d = new Date(ms);
+  return d.getHours() * 3600 + d.getMinutes() * 60 + d.getSeconds();
+}
+// Für das Dashboard: [[von, bis], ...] in Sekunden ab 0 Uhr, inkl. der laufenden Sitzung
+function getTimeline(username) {
+  const s = accountStats[username];
+  if (!s) return [];
+  const now = Date.now();
+  const mid = startOfToday(now);
+  const list = (s.segments || []).map(([a, b]) => [a, b]);
+  if (s.sessionStart) {
+    // laufende Sitzung; nach einem kurzen Wackler (unter einer Minute) an die letzte Zeit anhängen
+    const last = list[list.length - 1];
+    if (last && s.sessionStart - last[1] <= SEG_MERGE_GAP_MS) last[1] = Math.max(last[1], now);
+    else list.push([s.sessionStart, now]);
+  }
+  const out = [];
+  for (const [a, b] of list) {
+    const A = wallSec(Math.max(a, mid));
+    const B = wallSec(Math.min(b, now));
+    if (Math.min(b, now) > Math.max(a, mid) && B > A) out.push([A, B]);
+  }
+  return out;
 }
 
 // Setzt alle Tageszaehler auf 0 zurueck (laufende Sitzungen bleiben aktiv).
@@ -1886,6 +1941,7 @@ function resetDailyStats() {
     const s = accountStats[username];
     s.totalMs = 0;
     s.day = today;
+    s.segments = [];
     if (s.sessionStart) s.sessionStart = Date.now();
   }
 }
@@ -1898,7 +1954,9 @@ function markOnline(username) {
 function markOffline(username) {
   const s = ensureStats(username);
   if (s.sessionStart) {
-    s.totalMs += Date.now() - s.sessionStart;
+    const now = Date.now();
+    s.totalMs += now - s.sessionStart;
+    addSegment(s, s.sessionStart, now);
     s.sessionStart = null;
   }
 }
@@ -2389,6 +2447,8 @@ function accountListForClient(viewerUser) {
     username: acc.username,
     status: bots[acc.username] ? bots[acc.username].status : 'gestoppt',
     uptimeMs: getUptimeMs(acc.username),
+    timeline: getTimeline(acc.username),
+    nowSec: wallSec(Date.now()),
     isPrimary: acc.username === effectivePrimary,
     autoChat: acc.autoChat || [],
     notifyElsewhere: acc.notifyElsewhere !== false,
@@ -2402,6 +2462,7 @@ function accountListForClient(viewerUser) {
         serverName: sv ? sv.name : c.server,
         status: bots[key] ? bots[key].status : 'gestoppt',
         uptimeMs: getUptimeMs(key),
+        timeline: getTimeline(key),
         isPrimary: key === chatSourceOf(c.server),
         autoChat: c.autoChat || [],
         notifyElsewhere: c.notifyElsewhere !== false,
@@ -5314,8 +5375,16 @@ const STATS_FILE = path.join(__dirname, 'statistik.json');
 function saveStats() {
   try {
     const totals = {};
-    for (const key of Object.keys(accountStats)) totals[key] = Math.round(getUptimeMs(key));
-    const data = JSON.stringify({ version: 1, day: getTodayStr(), savedAt: Date.now(), summarySentFor: lastDiscordSummaryDate, totals });
+    const segments = {};
+    const now = Date.now();
+    for (const key of Object.keys(accountStats)) {
+      totals[key] = Math.round(getUptimeMs(key));
+      const st = accountStats[key];
+      const segs = (st.segments || []).map(([a, b]) => [a, b]);
+      if (st.sessionStart) segs.push([st.sessionStart, now]); // laufende Sitzung bis jetzt
+      if (segs.length) segments[key] = segs;
+    }
+    const data = JSON.stringify({ version: 2, day: getTodayStr(), savedAt: now, summarySentFor: lastDiscordSummaryDate, totals, segments });
     const tmp = STATS_FILE + '.tmp';
     fs.writeFileSync(tmp, data);
     fs.renameSync(tmp, STATS_FILE);
@@ -5341,11 +5410,27 @@ function restoreStats() {
   if (typeof raw.summarySentFor === 'string') lastDiscordSummaryDate = raw.summarySentFor;
   const today = getTodayStr();
   if (raw.day === today) {
+    const mid = startOfToday();
+    const savedAt = Number.isFinite(raw.savedAt) ? Math.min(raw.savedAt, Date.now()) : Date.now();
     for (const [key, ms] of Object.entries(totals)) {
       const st = ensureStats(key);
       st.totalMs = ms;
       st.sessionStart = null;
       st.day = today;
+      st.segments = [];
+      const list = raw.segments && Array.isArray(raw.segments[key]) ? raw.segments[key] : null;
+      if (list) {
+        const ok = list
+          .slice(-1000) // Sicherheitsgrenze, gespeichert werden höchstens 150 pro Verbindung
+          .filter((x) => Array.isArray(x) && Number.isFinite(x[0]) && Number.isFinite(x[1]) && x[1] > x[0])
+          .map(([a, b]) => [Math.max(a, mid), Math.min(b, savedAt)])
+          .filter(([a, b]) => b > a)
+          .sort((x, y) => x[0] - y[0]);
+        for (const [a, b] of ok) addSegment(st, a, b);
+      } else if (!raw.segments && ms > 0) {
+        // ältere statistik.json ohne Zeitleiste: so tun, als wäre es am Stück bis zum Speichern gewesen
+        addSegment(st, Math.max(mid, savedAt - ms), savedAt);
+      }
     }
     console.log(`[Statistik] Online-Zeiten von heute übernommen (${Object.keys(totals).length} Verbindungen)`);
   } else if (raw.day < today && lastDiscordSummaryDate !== raw.day) {

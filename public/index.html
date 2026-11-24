@@ -551,16 +551,61 @@
     gap: 8px;
     margin-top: 8px;
   }
-  /* Balken = ganzer Tag (24 h), gefüllt = so lange war der Account heute online.
-     Feine Striche bei 6, 12 und 18 Stunden. */
+  /* Zeitleiste des Tages: links 0 Uhr, rechts 24 Uhr. Farbig = zu dieser Uhrzeit online,
+     Lücken = offline, dunkler Grund = schon vorbei, Strich = jetzt. Feine Striche bei 6, 12, 18 Uhr. */
   .uptime-bar {
     position: relative;
     flex: 1;
-    height: 6px;
-    background: var(--border-row);
+    height: 8px;
+    background: color-mix(in srgb, var(--text-sub) 13%, transparent);
     border-radius: 4px;
     overflow: hidden;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
   }
+  .uptime-bar:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .uptime-past {
+    position: absolute; top: 0; bottom: 0; left: 0;
+    background: color-mix(in srgb, var(--text-sub) 30%, transparent);
+  }
+  .uptime-seg {
+    position: absolute; top: 0; bottom: 0;
+    min-width: 2px;
+    background: var(--accent);
+  }
+  .uptime-now {
+    position: absolute; top: 0; bottom: 0;
+    width: 2px; margin-left: -1px;
+    background: var(--text-main);
+    opacity: 0.75;
+  }
+  .uptime-track { position: relative; flex: 1; min-width: 0; }
+  .uptime-detail {
+    margin-top: 4px;
+    padding-top: 13px; /* Platz für die Uhrzeiten unter dem Balken */
+    font-size: 11px;
+    line-height: 1.45;
+    color: var(--text-sub);
+  }
+  .uptime-detail b { color: var(--text-main); font-weight: 600; }
+  /* Uhrzeiten unter dem Balken (nur aufgeklappt), an denselben Stellen wie die feinen Striche */
+  .uptime-scale {
+    position: absolute;
+    left: 0; right: 0;
+    top: calc(100% + 3px);
+    height: 12px;
+    font-size: 9.5px; color: var(--text-sub);
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .uptime-scale span { position: absolute; top: 0; transform: translateX(-50%); white-space: nowrap; }
+  .uptime-scale span:nth-child(1) { left: 0; transform: none; }
+  .uptime-scale span:nth-child(2) { left: 25%; }
+  .uptime-scale span:nth-child(3) { left: 50%; }
+  .uptime-scale span:nth-child(4) { left: 75%; }
+  .uptime-scale span:nth-child(5) { right: 0; transform: none; }
+  .conn-tl { margin-bottom: 7px; }
+  .conn-tl .uptime-row { margin-top: 0; }
+  .conn-tl .uptime-bar { height: 5px; }
   .uptime-bar::after {
     content: '';
     position: absolute;
@@ -571,12 +616,6 @@
       linear-gradient(var(--tick), var(--tick)) 25% 0 / 1px 100% no-repeat,
       linear-gradient(var(--tick), var(--tick)) 50% 0 / 1px 100% no-repeat,
       linear-gradient(var(--tick), var(--tick)) 75% 0 / 1px 100% no-repeat;
-  }
-  .uptime-fill {
-    height: 100%;
-    background: var(--accent);
-    border-radius: 4px;
-    transition: width 0.4s ease;
   }
   .autochat-area {
     margin-top: 10px;
@@ -2517,6 +2556,57 @@ function formatDuration(ms) {
   return `${m}m`;
 }
 
+// ---------- Zeitleiste "heute": links 0 Uhr, rechts 24 Uhr ----------
+// timeline vom Server: [[von, bis], ...] in Sekunden ab 0 Uhr (Uhrzeit des Managers)
+const DAY_SEC = 24 * 60 * 60;
+const openTimelines = new Set(); // aufgeklappte Zeitleisten - die Liste wird alle 30 s neu gebaut
+function clockText(sec) {
+  const v = Math.max(0, Math.min(DAY_SEC, Math.floor(sec / 60) * 60));
+  return `${Math.floor(v / 3600)}:${String(Math.floor((v % 3600) / 60)).padStart(2, '0')}`;
+}
+function timelineParts(timeline, nowSec) {
+  const clamp = (x) => Math.max(0, Math.min(DAY_SEC, x));
+  const now = Number.isFinite(nowSec) ? clamp(nowSec) : null;
+  const segs = (Array.isArray(timeline) ? timeline : [])
+    .filter((x) => Array.isArray(x) && Number.isFinite(x[0]) && Number.isFinite(x[1]) && x[1] > x[0])
+    .map(([a, b]) => [clamp(a), clamp(b)]);
+  const live = now !== null && segs.length > 0 && segs[segs.length - 1][1] >= now - 5;
+  const items = segs.map(([a, b], i) => (live && i === segs.length - 1 ? `seit ${clockText(a)}` : `${clockText(a)}–${clockText(b)}`));
+  return { segs, now, live, items };
+}
+function timelineList(items, max) {
+  if (items.length <= max) return items.join(', ');
+  return `${items.length - max} frühere, ${items.slice(-max).join(', ')}`;
+}
+function timelineHtml(key, timeline, nowSec, uptimeMs) {
+  const t = timelineParts(timeline, nowSec);
+  const pct = (x) => ((x / DAY_SEC) * 100).toFixed(3);
+  const open = openTimelines.has(key);
+  const tip = t.segs.length
+    ? `Online heute: ${timelineList(t.items, 8)} – zusammen ${formatDuration(uptimeMs)}. Balken = 0 bis 24 Uhr.`
+    : 'Heute noch nicht online. Balken = 0 bis 24 Uhr.';
+  const k = jsArg(key);
+  const bar = `<div class="uptime-bar" data-tl="${escapeHtml(key)}" role="button" tabindex="0" aria-expanded="${open}" title="${escapeHtml(tip)}" aria-label="${escapeHtml(tip)}" onclick="toggleTimeline(${k})" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleTimeline(${k})}">`
+    + (t.now !== null ? `<div class="uptime-past" style="width:${pct(t.now)}%"></div>` : '')
+    + t.segs.map(([a, b]) => `<div class="uptime-seg" style="left:${pct(a)}%;width:${pct(b - a)}%"></div>`).join('')
+    + (t.now !== null ? `<div class="uptime-now" style="left:${pct(t.now)}%"></div>` : '')
+    + '</div>';
+  const track = `<div class="uptime-track">${bar}<div class="uptime-scale" data-tl="${escapeHtml(key)}"${open ? '' : ' hidden'}>`
+    + '<span>0</span><span>6</span><span>12</span><span>18</span><span>24 Uhr</span></div></div>';
+  const text = t.segs.length
+    ? `Online: <b>${escapeHtml(timelineList(t.items, 30))}</b>${t.live ? '' : ' (gerade offline)'}`
+    : 'Heute noch nicht online.';
+  const detail = `<div class="uptime-detail" data-tl="${escapeHtml(key)}"${open ? '' : ' hidden'}>${text}</div>`;
+  return { bar: track, detail };
+}
+function toggleTimeline(key) {
+  if (openTimelines.has(key)) openTimelines.delete(key);
+  else openTimelines.add(key);
+  const open = openTimelines.has(key);
+  document.querySelectorAll('.uptime-detail, .uptime-scale').forEach((el) => { if (el.dataset.tl === key) el.hidden = !open; });
+  document.querySelectorAll('.uptime-bar').forEach((el) => { if (el.dataset.tl === key) el.setAttribute('aria-expanded', String(open)); });
+}
+
 function renderAccounts(accounts) {
   accountListEl.innerHTML = '';
 
@@ -2539,9 +2629,8 @@ function renderAccounts(accounts) {
     const isPrimary = acc.isPrimary;
     const isBedrock = acc.username.startsWith('.');
     const canManage = myRole === 'owner' || myRole === 'admin';
-    // ganzer Balken = 24 Stunden (vorher: voll schon nach 8 Stunden)
-    const uptimePct = Math.min(100, Math.max(0, ((acc.uptimeMs || 0) / (24 * 60 * 60 * 1000)) * 100));
-    const uptimeTip = `${formatDuration(acc.uptimeMs)} von 24 Stunden online (${Math.round(uptimePct)} %)`;
+    // Zeitleiste: ganzer Balken = heute 0 bis 24 Uhr, markiert = zu dieser Uhrzeit online
+    const tl = timelineHtml(acc.username, acc.timeline, acc.nowSec, acc.uptimeMs);
     const autoChatHtml = (acc.autoChat || []).map((a, i) =>
       `<div class="autochat-item">
         <span class="text">${escapeHtml(a.text)}</span>
@@ -2591,6 +2680,7 @@ function renderAccounts(accounts) {
           <button class="icon-btn ghost" onclick="deleteAutoChat(${jsArg(c.key)},${i})" title="Entfernen">✕</button>
         </div>`
       ).join('');
+      const cTl = timelineHtml(c.key, c.timeline, acc.nowSec, c.uptimeMs);
       return `
         <div class="conn-row">
           <div class="conn-head">
@@ -2599,6 +2689,7 @@ function renderAccounts(accounts) {
             ${(canManage && (c.autoChat || []).length > 0) ? `<span class="primary-badge" style="background:color-mix(in srgb,var(--status-other-dot) 15%,transparent);color:var(--status-other-text);border-color:color-mix(in srgb,var(--status-other-dot) 35%,transparent)">⏱ ${c.autoChat.length}</span>` : ''}
             <span class="status ${statusClass(c.status)}" title="${cStatus}"><span class="status-text">${cStatus}</span></span>
           </div>
+          <div class="conn-tl"><div class="uptime-row">${cTl.bar}</div>${cTl.detail}</div>
           <div class="account-buttons">
             <div class="btn-group">
               ${cStar}
@@ -2664,9 +2755,10 @@ function renderAccounts(accounts) {
         </div>` : ''}
       </div>
       <div class="uptime-row">
-        <div class="uptime-bar" title="${escapeHtml(uptimeTip)}" role="img" aria-label="${escapeHtml(uptimeTip)}"><div class="uptime-fill" style="width:${uptimePct.toFixed(2)}%"></div></div>
+        ${tl.bar}
         <span class="uptime-text">${formatDuration(acc.uptimeMs)} heute</span>
       </div>
+      ${tl.detail}
       ${conns.length ? `<div class="conn-list">${connHtml}</div>` : ''}
       ${connAddHtml}
       ${canManage ? `<div class="autochat-area" id="autochat-${escapeHtml(acc.username)}" style="display:none;">

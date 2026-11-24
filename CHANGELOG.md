@@ -1,5 +1,19 @@
 # Änderungen
 
+## Tagesbalken als Zeitleiste (November 2026)
+
+- Der Balken unter jedem Account ist jetzt eine Zeitleiste des Tages: links 0 Uhr, rechts 24 Uhr.
+  Markiert ist, zu welcher Uhrzeit der Account wirklich online war – Ausfälle (Kick, Stop,
+  Neustart) sind Lücken an der richtigen Stelle. Dunkler Grund = schon vorbei, Strich = jetzt.
+  Unterbrechungen unter einer Minute zählen nicht als Lücke.
+- Antippen/Anklicken klappt die Uhrzeiten als Liste auf („Online: 10:00–11:00, seit 11:30“),
+  darunter 0/6/12/18/24 Uhr. Bleibt beim Aktualisieren der Liste offen.
+- Verbindungen auf weiteren Servern haben eine eigene, schmalere Zeitleiste.
+- Der Manager merkt sich dafür, wann eine Verbindung on- und offline ging (in `statistik.json`,
+  übersteht Neustarts; um Mitternacht beginnt die Zeitleiste neu). Aus einer älteren
+  `statistik.json` ohne Uhrzeiten wird die heutige Zeit am Stück bis zum letzten Speichern
+  eingezeichnet.
+
 ## Tagesbalken = 24 Stunden (November 2026)
 
 - Der Balken unter jedem Account war schon nach 8 Stunden voll – deshalb sah er fast immer voll
