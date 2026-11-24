@@ -555,7 +555,8 @@ const t = {
 ;(async () => {
   try {
     require(path.join(lauf, 'server.js'))
-    const bereit = await t.warteBis(async () => (await fetch(base + '/login')).ok, 20000)
+    // bis zu 15 echte Sekunden (bei voller Last im Gesamtlauf braucht der Start manchmal länger)
+    const bereit = await t.warteBis(async () => (await fetch(base + '/login')).ok, 15000 * SCALE)
     if (!bereit) throw new Error('Server startet nicht')
     process.stdout.write(`${szenario.name || path.basename(szenarioDatei)}${PHASE > 1 ? ` (Phase ${PHASE})` : ''}\n`)
     await szenario.run(t)
