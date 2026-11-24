@@ -161,6 +161,10 @@ Buttons pro Account:
                       bestehende Accounts behalten ihre Einstellung.
    ✕                  Account entfernen (löscht auch den gespeicherten Login)
 
+Balken unter dem Account: der ganze Balken ist ein Tag (24 Stunden), der
+gefüllte Teil zeigt, wie lange der Account heute online war (12 h = halb voll).
+Die feinen Striche stehen bei 6, 12 und 18 Stunden. Rechts steht die Zeit.
+
 Gut zu wissen:
  - Loggst du dich mit einem Account selbst im Spiel ein, fliegt der Bot raus
    ("anderswo eingeloggt"). Er verbindet sich dann bewusst NICHT automatisch
