@@ -1,5 +1,12 @@
 # Änderungen
 
+## Tagesbalken = 24 Stunden (November 2026)
+
+- Der Balken unter jedem Account war schon nach 8 Stunden voll – deshalb sah er fast immer voll
+  aus. Jetzt steht der ganze Balken für den ganzen Tag (24 Stunden), gefüllt ist der Teil, den der
+  Account heute online war (12 h = halber Balken). Feine Striche bei 6, 12 und 18 Stunden; beim
+  Drüberfahren steht z.B. „12h 0m von 24 Stunden online (50 %)“. Rechts bleibt die Zeit.
+
 ## Menüs am Handy: erst lesen, dann klicken (November 2026)
 
 - Auf iPhone und iPad hat ein Tippen auf ein Item in einem Menü (z.B. /warp) sofort geklickt –

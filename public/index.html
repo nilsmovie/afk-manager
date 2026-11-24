@@ -551,12 +551,26 @@
     gap: 8px;
     margin-top: 8px;
   }
+  /* Balken = ganzer Tag (24 h), gefüllt = so lange war der Account heute online.
+     Feine Striche bei 6, 12 und 18 Stunden. */
   .uptime-bar {
+    position: relative;
     flex: 1;
-    height: 4px;
+    height: 6px;
     background: var(--border-row);
     border-radius: 4px;
     overflow: hidden;
+  }
+  .uptime-bar::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    --tick: color-mix(in srgb, var(--text-main) 30%, transparent);
+    background:
+      linear-gradient(var(--tick), var(--tick)) 25% 0 / 1px 100% no-repeat,
+      linear-gradient(var(--tick), var(--tick)) 50% 0 / 1px 100% no-repeat,
+      linear-gradient(var(--tick), var(--tick)) 75% 0 / 1px 100% no-repeat;
   }
   .uptime-fill {
     height: 100%;
@@ -1050,7 +1064,7 @@
     border-radius: 7px;
     background: var(--chatlog-bg);
     border: 1px solid var(--card-border);
-    color: var(--text);
+    color: var(--text-main);
     cursor: pointer;
     font-variant-numeric: tabular-nums;
   }
@@ -2525,7 +2539,9 @@ function renderAccounts(accounts) {
     const isPrimary = acc.isPrimary;
     const isBedrock = acc.username.startsWith('.');
     const canManage = myRole === 'owner' || myRole === 'admin';
-    const uptimePct = Math.min(100, ((acc.uptimeMs || 0) / (8 * 60 * 60 * 1000)) * 100);
+    // ganzer Balken = 24 Stunden (vorher: voll schon nach 8 Stunden)
+    const uptimePct = Math.min(100, Math.max(0, ((acc.uptimeMs || 0) / (24 * 60 * 60 * 1000)) * 100));
+    const uptimeTip = `${formatDuration(acc.uptimeMs)} von 24 Stunden online (${Math.round(uptimePct)} %)`;
     const autoChatHtml = (acc.autoChat || []).map((a, i) =>
       `<div class="autochat-item">
         <span class="text">${escapeHtml(a.text)}</span>
@@ -2648,7 +2664,7 @@ function renderAccounts(accounts) {
         </div>` : ''}
       </div>
       <div class="uptime-row">
-        <div class="uptime-bar"><div class="uptime-fill" style="width:${uptimePct}%"></div></div>
+        <div class="uptime-bar" title="${escapeHtml(uptimeTip)}" role="img" aria-label="${escapeHtml(uptimeTip)}"><div class="uptime-fill" style="width:${uptimePct.toFixed(2)}%"></div></div>
         <span class="uptime-text">${formatDuration(acc.uptimeMs)} heute</span>
       </div>
       ${conns.length ? `<div class="conn-list">${connHtml}</div>` : ''}
