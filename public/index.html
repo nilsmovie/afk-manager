@@ -372,9 +372,12 @@
     background: color-mix(in srgb, var(--text-sub) 10%, transparent);
     color: var(--text-main);
   }
+  /* minmax(0, 1fr) statt 1fr: sonst macht eine lange Zeile ohne Umbruch (z.B. Servername + Chat-Quelle
+     + Auto-Chat + Status) die ganze Spalte breiter als den Bildschirm - die Karten stehen dann
+     rechts über, links bleibt der normale Rand */
   .layout {
     display: grid;
-    grid-template-columns: 340px 1fr;
+    grid-template-columns: 340px minmax(0, 1fr);
     gap: 20px;
   }
   .card {
@@ -513,6 +516,8 @@
     align-items: center;
     justify-content: space-between;
     gap: 8px;
+    flex-wrap: wrap; /* sehr schmale Handys: Symbole rutschen in die nächste Zeile statt aus der Karte */
+    row-gap: 6px;
   }
   .account-buttons .btn-group {
     display: flex;
@@ -672,14 +677,15 @@
     background: color-mix(in srgb, var(--accent) 3%, transparent);
   }
   .conn-head { display: flex; align-items: center; gap: 6px; min-width: 0; margin-bottom: 7px; }
+  /* Wird es eng, kürzt sich zuerst der Servername ("Steal a Sp…"), der Status bleibt lesbar */
   .conn-server {
     font-size: 12.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
     flex: 0 1 auto; min-width: 0;
   }
   .conn-server::before { content: '↳ '; color: var(--text-sub); font-weight: 400; }
-  .conn-head .status { margin-left: auto; flex: 0 50 auto; min-width: 0; white-space: nowrap; }
+  .conn-head .status { margin-left: auto; flex: 0 1 auto; min-width: 5.6em; white-space: nowrap; }
+  @media (max-width: 340px) { .conn-head .status { min-width: 0; } }
   .conn-head .primary-badge { flex-shrink: 0; white-space: nowrap; }
-  .conn-uptime { font-size: 11px; color: var(--text-sub); white-space: nowrap; }
   .conn-add-area { margin-top: 8px; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
   .conn-add-area select { width: auto; flex: 1 1 150px; margin-bottom: 0; font-size: 12px; padding: 6px 8px; }
   .conn-add-area .sub { font-size: 11.5px; }
@@ -1226,7 +1232,7 @@
 
   @media (min-width: 900px) {
     .layout {
-      grid-template-columns: 380px 1fr;
+      grid-template-columns: 380px minmax(0, 1fr);
     }
     .cat-control-row {
       display: flex;
@@ -1242,7 +1248,7 @@
   @media (max-width: 800px) {
     body { padding: 14px; }
     .layout {
-      grid-template-columns: 1fr;
+      grid-template-columns: minmax(0, 1fr);
     }
     #chatlog { height: 300px; }
   }
@@ -2707,13 +2713,12 @@ function renderAccounts(accounts) {
             ${(canManage && (c.autoChat || []).length > 0) ? `<span class="primary-badge" style="background:color-mix(in srgb,var(--status-other-dot) 15%,transparent);color:var(--status-other-text);border-color:color-mix(in srgb,var(--status-other-dot) 35%,transparent)">⏱ ${c.autoChat.length}</span>` : ''}
             <span class="status ${statusClass(c.status)}" title="${cStatus}"><span class="status-text">${cStatus}</span></span>
           </div>
-          <div class="conn-tl"><div class="uptime-row">${cTl.bar}</div>${cTl.detail}</div>
+          <div class="conn-tl"><div class="uptime-row">${cTl.bar}<span class="uptime-text">${formatDuration(c.uptimeMs)} heute</span></div>${cTl.detail}</div>
           <div class="account-buttons">
             <div class="btn-group">
               ${cStar}
               <button class="small" onclick="startAccount(${jsArg(c.key)})">Start</button>
               <button class="small stop" onclick="stopAccount(${jsArg(c.key)})">Stop</button>
-              <span class="conn-uptime">${formatDuration(c.uptimeMs)}</span>
             </div>
             ${canManage ? `<div class="btn-group">
               ${cNotify}
