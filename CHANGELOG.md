@@ -1,5 +1,19 @@
 # Änderungen
 
+## Discord: kurze Ausfälle nicht mehr über den Webhook (November 2026)
+
+- War Discord kurz nicht erreichbar (Internet weg, z.B. die nächtliche Zwangstrennung des
+  Routers, oder eine Störung bei Discord), ist der Manager für 10 Minuten auf den Webhook
+  umgestiegen. Die Meldungen kamen dann von „AFK Manager (WH)“, und was während der Störung
+  passiert ist, ging verloren.
+- Jetzt werden die Meldungen aufgehoben und vom Bot nachgeschickt, sobald Discord wieder
+  erreichbar ist: in der richtigen Reihenfolge und mit der Uhrzeit, zu der es passiert ist.
+  Das gilt auch für den Chat-Spiegel. Danach geht alles sofort wieder über den Bot.
+- Der Webhook springt nur noch ein, wenn der Bot im Kanal nicht schreiben darf (fehlende Rechte,
+  Kanal weg) oder Discord länger als 15 Minuten nicht erreichbar ist.
+- Im Log steht „Discord: gerade nicht erreichbar …“ und danach „wieder erreichbar (nach ca. N
+  Min.) – N aufgehobene Meldung(en) nachgeschickt“.
+
 ## iPhone: kein Hineinzoomen, kein Passwort-Vorschlag (November 2026)
 
 - Auf dem iPhone ist Safari beim Neuladen ins Feld „Account hinzufügen“ gesprungen, hat

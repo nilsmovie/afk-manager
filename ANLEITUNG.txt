@@ -369,7 +369,13 @@ b) Bot (für Befehle und Buttons):
    Ist der Bot eingerichtet, schickt ER alle Meldungen (Login-Codes, Kicks,
    online/offline, Start, Tageszusammenfassung, Chat-Spiegel), und zwar in
    dieselben Kanäle, in die bisher die Webhooks geschrieben haben. Die Webhooks
-   bleiben nur als Rückfall eingetragen (falls der Bot mal nicht verbunden ist).
+   bleiben nur als Rückfall eingetragen: wenn der Bot beim Start nicht verbunden
+   wird oder im Kanal nicht schreiben darf (dann steht im Log ein Hinweis auf
+   die Rechte). Ist Discord nur kurz nicht erreichbar (Internet weg, z.B. die
+   nächtliche Zwangstrennung des Routers, oder eine Störung bei Discord), hebt
+   der Manager die Meldungen auf und der Bot schickt sie nach, sobald es wieder
+   geht - in der richtigen Reihenfolge und mit der Uhrzeit des Ereignisses.
+   Erst wenn das länger als 15 Minuten dauert, gehen sie per Webhook raus.
    Der Bot braucht dafür in diesen Kanälen ebenfalls die Rechte aus Punkt 4.
    Wer die Kanäle fest vorgeben will (optional):
       DISCORD_NOTIFY_CHANNEL_ID   Kanal für alle Meldungen
