@@ -414,6 +414,13 @@ class FakeDiscordClient extends EventEmitter {
     this.channels = {
       fetch: async (cid) => {
         if (global.__kaputteKanaele && global.__kaputteKanaele.has(cid)) throw new Error('Missing Access')
+        if (global.__discordOffline === 'netz') {
+          // so sieht es aus, wenn das Internet weg ist (undici/fetch)
+          const e = new TypeError('fetch failed')
+          e.cause = Object.assign(new Error('getaddrinfo EAI_AGAIN discord.com'), { code: 'EAI_AGAIN' })
+          throw e
+        }
+        if (global.__discordOffline === 'stoerung') throw Object.assign(new Error('503 Service Unavailable'), { status: 503 })
         return {
           id: cid,
           name: cid,
@@ -528,6 +535,8 @@ const t = {
       })
       return antworten
     },
+    // Discord nicht erreichbar: 'netz' (Internet weg), 'stoerung' (Discord 503), false (wieder da)
+    offline: (art = 'netz') => { global.__discordOffline = art || null },
     kaputt: (kanal, an = true) => { global.__kaputteKanaele = global.__kaputteKanaele || new Set(); if (an) global.__kaputteKanaele.add(kanal); else global.__kaputteKanaele.delete(kanal) },
   },
   // ---- Webseite ----

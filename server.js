@@ -2000,21 +2000,33 @@ async function postToDiscordWebhook(url, payload) {
 // Ist ein Discord-Bot eingerichtet, schickt ER alle Meldungen (Login-Codes, Kicks, Online/
 // Offline, Start, Tageszusammenfassung, Chat-Spiegel) - und zwar in dieselben Kanaele, in die
 // bisher die Webhooks geschrieben haben (die Kanal-ID wird aus der Webhook-Adresse ermittelt).
-// Die Webhooks dienen nur noch als Rueckfall: wenn kein Bot eingerichtet ist, er (noch) nicht
-// verbunden ist oder im Kanal nicht schreiben darf.
+// Die Webhooks dienen nur noch als Rueckfall: wenn kein Bot eingerichtet ist, er beim Start nicht
+// verbunden wird oder im Kanal nicht schreiben darf (fehlende Rechte, Kanal weg).
+// Ist Discord nur kurz nicht erreichbar (Internet weg, z.B. die naechtliche Zwangstrennung des
+// Routers, oder Discord hat eine Stoerung), werden die Meldungen aufgehoben und vom Bot
+// nachgeschickt, sobald es wieder geht - in der richtigen Reihenfolge und mit der Uhrzeit, zu der
+// es passiert ist. Erst wenn das laenger als 15 Minuten dauert, geht es per Webhook raus.
 // Optional in der .env, um die Kanaele fest vorzugeben:
 //   DISCORD_NOTIFY_CHANNEL_ID  Kanal fuer alle Meldungen
 //   DISCORD_CHAT_CHANNEL_ID    Kanal fuer den Chat-Spiegel
 const DISCORD_NOTIFY_CHANNEL_ID = process.env.DISCORD_NOTIFY_CHANNEL_ID || '';
 const DISCORD_CHAT_CHANNEL_ID = process.env.DISCORD_CHAT_CHANNEL_ID || '';
 const DISCORD_READY_WAIT_MS = 45 * 1000;        // so lange werden Meldungen beim Start aufgehoben
-const DISCORD_BOT_RETRY_MS = 10 * 60 * 1000;    // nach einem Sendefehler so lange per Webhook
+const DISCORD_BOT_RETRY_MS = 10 * 60 * 1000;    // Bot darf nicht schreiben -> so lange per Webhook
+const DISCORD_OUTBOX_MAX_MS = 15 * 60 * 1000;   // so lange wird eine Stoerung ausgesessen
+const DISCORD_OUTBOX_DELAYS_MS = [10 * 1000, 20 * 1000, 30 * 1000, 60 * 1000]; // Abstand der Versuche
+const DISCORD_OUTBOX_MAX = 300;                 // mehr wird nicht aufgehoben (zuerst fliegt Chat raus)
+const DISCORD_TEMP = Symbol('discord-voruebergehend'); // Senden ging gerade nicht, spaeter nochmal
 let discordClient = null;                       // wird gesetzt, wenn der Bot eingerichtet ist
 let discordReady = false;
 let discordStartedAt = 0;
 const discordTargets = { notify: null, chat: null };
 const discordBotBrokenSince = { notify: 0, chat: 0 };
 const discordPending = [];
+const discordOutbox = [];                       // aufgehobene Meldungen: { kind, payload, resolve, since, tries }
+let discordOutboxTimer = null;
+let discordOutboxBusy = false;
+let discordOutageSince = 0;                     // seit wann Discord nicht erreichbar ist (0 = alles gut)
 
 async function webhookChannelId(url) {
   if (!url) return null;
@@ -2034,7 +2046,23 @@ async function resolveDiscordTargets() {
   console.log(`Discord: Meldungen kommen vom Bot in Kanal ${discordTargets.notify || '-'}, Chat-Spiegel in Kanal ${discordTargets.chat || '- (aus)'}`);
 }
 
-// Rueckgabe: gesendete Bot-Nachricht, null (nichts zu senden) oder undefined (Bot nicht nutzbar)
+// Fehler, bei denen es gleich nochmal klappen kann: kein Internet, Zeitueberschreitung, Stoerung
+// bei Discord (5xx) oder zu viele Anfragen (429). Alles andere (fehlende Rechte, Kanal geloescht,
+// ungueltige Nachricht) bleibt so, bis jemand etwas aendert.
+function discordTemporaryError(e) {
+  if (!e) return false;
+  const status = Number(e.status);
+  if (status === 429 || status >= 500) return true;
+  if (Number.isFinite(status) && status > 0) return false; // andere Antwort von Discord
+  if (typeof e.code === 'number') return false;            // Discord-Fehlercode (z.B. 50013 Rechte)
+  const cause = e.cause || {};
+  const code = String(e.code || cause.code || '');
+  if (/^(ECONNRESET|ECONNREFUSED|ENOTFOUND|EAI_AGAIN|ETIMEDOUT|ENETUNREACH|EHOSTUNREACH|EPIPE|UND_ERR_\w+)$/.test(code)) return true;
+  return e.name === 'AbortError' || e.name === 'TimeoutError' || /fetch failed|socket hang up|network|timed? ?out|aborted/i.test(`${e.message} ${cause.message || ''}`);
+}
+
+// Rueckgabe: gesendete Bot-Nachricht, undefined (Bot nicht nutzbar -> Webhook) oder DISCORD_TEMP
+// (gerade nicht erreichbar -> aufheben und spaeter nochmal)
 async function sendViaBot(kind, payload) {
   if (!discordClient || !discordReady) return undefined;
   const channelId = discordTargets[kind];
@@ -2045,10 +2073,94 @@ async function sendViaBot(kind, payload) {
     if (!channel || typeof channel.send !== 'function') throw new Error('Kanal nicht gefunden');
     return await channel.send({ allowedMentions: { parse: [] }, ...payload });
   } catch (e) {
+    if (discordTemporaryError(e)) {
+      if (!discordOutageSince) {
+        discordOutageSince = Date.now();
+        console.warn(`Discord: gerade nicht erreichbar (${e.message}) - Meldungen werden aufgehoben und nachgeschickt, sobald es wieder geht`);
+      }
+      return DISCORD_TEMP;
+    }
     discordBotBrokenSince[kind] = Date.now();
     console.error(`Discord: Bot kann nicht in Kanal ${channelId} schreiben (${e.message}) - nutze 10 Minuten lang den Webhook. Hat der Bot dort die Rechte "Kanal ansehen", "Nachrichten senden" und "Links einbetten"?`);
     return undefined;
   }
+}
+
+// ---------- Aufgehobene Meldungen nachschicken ----------
+function scheduleDiscordOutbox(delay) {
+  if (discordOutboxTimer) return;
+  discordOutboxTimer = setTimeout(() => {
+    discordOutboxTimer = null;
+    processDiscordOutbox();
+  }, delay);
+}
+
+function queueDiscordOutbox(kind, payload, tries) {
+  return new Promise((resolve) => {
+    discordOutbox.push({ kind, payload, resolve, since: Date.now(), tries });
+    while (discordOutbox.length > DISCORD_OUTBOX_MAX) {
+      // zu viel aufgehoben: zuerst alte Chat-Zeilen weglassen, sonst die aelteste Meldung
+      let i = discordOutbox.findIndex((x) => x.kind === 'chat');
+      if (i < 0) i = 0;
+      const [weg] = discordOutbox.splice(i, 1);
+      weg.resolve(null);
+      if (!discordOutbox.droppedLogged) console.warn(`Discord: mehr als ${DISCORD_OUTBOX_MAX} Meldungen aufgehoben - die ältesten fallen weg`);
+      discordOutbox.droppedLogged = true;
+    }
+    const delay = DISCORD_OUTBOX_DELAYS_MS[Math.min(tries, DISCORD_OUTBOX_DELAYS_MS.length) - 1] || DISCORD_OUTBOX_DELAYS_MS[0];
+    scheduleDiscordOutbox(delay);
+  });
+}
+
+async function processDiscordOutbox() {
+  if (discordOutboxBusy) return;
+  discordOutboxBusy = true;
+  let sentCount = 0;
+  let viaWebhook = 0;
+  try {
+    while (discordOutbox.length) {
+      const item = discordOutbox[0];
+      const tooOld = Date.now() - item.since > DISCORD_OUTBOX_MAX_MS;
+      const sent = tooOld ? undefined : await sendViaBot(item.kind, item.payload);
+      if (sent === DISCORD_TEMP) {
+        item.tries++;
+        scheduleDiscordOutbox(DISCORD_OUTBOX_DELAYS_MS[Math.min(item.tries, DISCORD_OUTBOX_DELAYS_MS.length) - 1]);
+        return;
+      }
+      discordOutbox.shift();
+      if (sent === undefined) {
+        await sendViaWebhook(item.kind, item.payload);
+        viaWebhook++;
+      } else {
+        sentCount++;
+      }
+      item.resolve(sent === undefined ? null : sent);
+    }
+    if (discordOutageSince) {
+      const min = Math.max(1, Math.round((Date.now() - discordOutageSince) / 60000));
+      if (sentCount > 0) {
+        console.log(`Discord: wieder erreichbar (nach ca. ${min} Min.) - ${sentCount} aufgehobene Meldung(en) nachgeschickt${viaWebhook ? `, ${viaWebhook} nach über 15 Minuten per Webhook` : ''}`);
+      } else if (viaWebhook > 0) {
+        console.warn(`Discord: Bot kommt seit über 15 Minuten nicht durch - ${viaWebhook} Meldung(en) per Webhook geschickt`);
+      }
+    }
+    discordOutageSince = 0;
+    discordOutbox.droppedLogged = false;
+  } finally {
+    discordOutboxBusy = false;
+  }
+}
+
+// Bot zuerst; ist Discord gerade nicht erreichbar, aufheben (und alles Weitere dahinter einreihen,
+// damit die Reihenfolge stimmt), darf der Bot nicht schreiben, per Webhook.
+// Rueckgabe sofort: { done: Nachricht|null } oder { later: Promise } (aufgehoben)
+async function deliverDiscordNow(kind, payload) {
+  if (discordOutbox.length) return { later: queueDiscordOutbox(kind, payload, 1) };
+  const sent = await sendViaBot(kind, payload);
+  if (sent === DISCORD_TEMP) return { later: queueDiscordOutbox(kind, payload, 1) };
+  if (sent !== undefined) return { done: sent };
+  await sendViaWebhook(kind, payload);
+  return { done: null };
 }
 
 async function sendViaWebhook(kind, payload) {
@@ -2075,18 +2187,17 @@ async function discordSend(kind, payload) {
     // Bot verbindet sich gerade (z.B. direkt nach dem Programmstart) -> kurz aufheben
     return new Promise((resolve) => discordPending.push({ kind, payload, resolve }));
   }
-  const sent = await sendViaBot(kind, payload);
-  if (sent !== undefined) return sent;
-  await sendViaWebhook(kind, payload);
-  return null;
+  const r = await deliverDiscordNow(kind, payload);
+  return r.later ? r.later : r.done;
 }
 
 async function flushDiscordPending() {
   const items = discordPending.splice(0);
   for (const item of items) {
-    const sent = await sendViaBot(item.kind, item.payload);
-    if (sent === undefined) await sendViaWebhook(item.kind, item.payload);
-    item.resolve(sent === undefined ? null : sent);
+    // nicht abwarten, bis eine aufgehobene Meldung wirklich raus ist - nur die Reihenfolge zaehlt
+    const r = await deliverDiscordNow(item.kind, item.payload);
+    if (r.later) r.later.then(item.resolve);
+    else item.resolve(r.done);
   }
 }
 
