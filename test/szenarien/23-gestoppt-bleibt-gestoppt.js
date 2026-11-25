@@ -38,7 +38,8 @@ module.exports = {
       await t.warte(120000)
       t.chk('Gestoppte starten nicht', java('mc.test', 'bravo').length === 0 && java('mc.test', 'charlie').length === 0 && java('mc.test', 'delta').length === 0 && java('lobby.test', 'alpha').length === 0 && t.bedrockClients.length === 0, t.javaBots.map((b) => `${b.username}@${b.opts.host}`))
       t.chk('Status "gestoppt"', (await status('bravo')) === 'gestoppt' && (await status('alpha@lobby')) === 'gestoppt' && (await status('.bed')) === 'gestoppt')
-      t.chk('Discord-Startmeldung nennt die Gestoppten', t.discord.nachrichten().some((m) => /2 Account\(s\) werden automatisch gestartet, 5 bleiben gestoppt/.test(t.discord.text(m))), t.discord.nachrichten().map(t.discord.text).filter((x) => /automatisch/.test(x)))
+      // (die Start-Meldung wird bearbeitet - am Anfang "werden automatisch gestartet", am Ende "sind online")
+      t.chk('Discord-Startmeldung nennt die Gestoppten', t.discord.nachrichten().some((m) => /AFK-Manager gestartet/.test(t.discord.text(m)) && /(2 Account\(s\) werden automatisch gestartet|2 Account\(s\) .* sind online \(nach [^)]*\)), 5 bleiben gestoppt/.test(t.discord.text(m))), t.discord.nachrichten().map(t.discord.text).filter((x) => /gestartet/.test(x)))
       // Starten hebt den Merker auf
       await t.api('POST', '/api/start/bravo')
       t.discord.befehl('!start alpha@lobby')

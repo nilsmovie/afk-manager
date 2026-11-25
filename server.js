@@ -2646,6 +2646,8 @@ function startupEmbed() {
   });
   const list = lines.join('\n');
   const sumTotal = states.reduce((n, x) => n + x.total, 0);
+  const sumStopped = states.reduce((n, x) => n + x.stopped, 0);
+  const stoppedText = sumStopped ? `, ${sumStopped} bleiben gestoppt` : '';
   const sumOnline = states.reduce((n, x) => n + (r.done[x.sv.id] ? x.total : x.online), 0);
   if (r.result === 'ok') {
     const aktiv = states.filter((x) => x.total > 0);
@@ -2653,7 +2655,7 @@ function startupEmbed() {
     return {
       ...base,
       title: '🟢 AFK-Manager gestartet – alle Accounts online',
-      description: `Alle ${sumTotal} Account(s) ${wo} sind online (nach ${minutesText(r.finishedAt - r.startedAt)}).\n\n${list}`,
+      description: `Alle ${sumTotal} Account(s) ${wo} sind online (nach ${minutesText(r.finishedAt - r.startedAt)})${stoppedText}.\n\n${list}`,
       color: DISCORD_COLOR_OK,
     };
   }
@@ -2661,7 +2663,7 @@ function startupEmbed() {
     return {
       ...base,
       title: '🟡 AFK-Manager gestartet – nicht alle online',
-      description: `Nach ${minutesText(r.finishedAt - r.startedAt)} sind ${sumOnline}/${sumTotal} Accounts online. ` +
+      description: `Nach ${minutesText(r.finishedAt - r.startedAt)} sind ${sumOnline}/${sumTotal} Accounts online${stoppedText}. ` +
         'Sobald die übrigen da sind, kommt für den Server „Alle Accounts wieder online“.\n\n' + list,
       color: DISCORD_COLOR_WARN,
     };

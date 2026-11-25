@@ -97,7 +97,10 @@ module.exports = {
         await p.goto(`http://127.0.0.1:${process.env.PORT}/`)
         await p.waitForSelector('.account-row .uptime-bar .uptime-seg')
         const sel = (key) => `.uptime-bar[data-tl="${key}"]`
-        const messen = (key) => p.$eval(sel(key), (bar) => {
+        const messen = async (key) => {
+          // erst messen, wenn der Balken fertig gezeichnet ist (die Liste wird alle 30 s neu gebaut)
+          await p.waitForFunction((s) => { const x = document.querySelector(s); return x && x.getBoundingClientRect().width > 50 }, sel(key), { timeout: 8000 * ZR })
+          return p.$eval(sel(key), (bar) => {
           const r = bar.getBoundingClientRect()
           const rel = (el) => { const q = el.getBoundingClientRect(); return [(q.left - r.left) / r.width, q.width / r.width] }
           return {
@@ -107,7 +110,8 @@ module.exports = {
             titel: bar.getAttribute('title'),
             offen: bar.getAttribute('aria-expanded'),
           }
-        })
+          })
+        }
         // erst messen, wenn die Liste fertig aufgebaut ist (Breite > 0)
         await p.waitForFunction(() => [...document.querySelectorAll('.uptime-bar')].every((x) => x.getBoundingClientRect().width > 50), null, { timeout: 8000 * ZR })
         const m = await messen('bravo')
