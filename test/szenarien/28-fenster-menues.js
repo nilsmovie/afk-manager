@@ -170,7 +170,8 @@ module.exports = {
         await p.keyboard.press('Escape')
         await p.waitForTimeout(900)
         t.chk('Browser: Esc schließt das Fenster', b.currentWindow === null)
-        t.chk('Browser: danach wieder das normale Inventar', await p.evaluate(() => document.getElementById('invWindow').hidden && !document.getElementById('invNormal').hidden))
+        // (die Ansicht wechselt erst mit dem nächsten Stand vom Server - darauf warten statt fester Pause)
+        t.chk('Browser: danach wieder das normale Inventar', await p.waitForFunction(() => document.getElementById('invWindow').hidden && !document.getElementById('invNormal').hidden, null, { timeout: 8000 * Math.max(1, Number(process.env.TEST_ZEITRAFFER || 40)) }).then(() => true, () => false))
       } else {
         await p.tap('#invWindow .slot[data-wslot="11"]')
         await p.waitForTimeout(300)
