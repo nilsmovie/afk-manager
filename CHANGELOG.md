@@ -1,5 +1,18 @@
 # Änderungen
 
+## Start-Meldung mit Fortschritt, Servername überall (November 2026)
+
+- Nach einem Neustart des Managers kommt nicht mehr für jeden Server einzeln „Alle Accounts
+  wieder online“. Die Meldung „AFK-Manager gestartet“ aktualisiert sich selbst (höchstens alle
+  15 Sekunden): pro Server ⏳ 20/26 online, ✅ wenn ein Server komplett ist, und am Ende
+  „AFK-Manager gestartet – alle Accounts online“ mit der Dauer.
+- Sind nach 20 Minuten noch nicht alle online, wird daraus „nicht alle online“ mit den fehlenden
+  Accounts. Für diesen Server kommt dann später wie gewohnt „Alle Accounts wieder online“.
+- „Alle Accounts wieder online“, „Alle Accounts offline“ und der Sammel-Kick nennen jetzt auch
+  beim Standardserver den Server, z.B. „Alle Accounts wieder online (clashsmp.de)“.
+- Selbst gestoppte Accounts zählen bei „Alle Accounts wieder online“ nicht mehr mit – vorher kam
+  für einen Server mit einem gestoppten Account diese Meldung nie.
+
 ## Discord: kurze Ausfälle nicht mehr über den Webhook (November 2026)
 
 - War Discord kurz nicht erreichbar (Internet weg, z.B. die nächtliche Zwangstrennung des

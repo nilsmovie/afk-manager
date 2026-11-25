@@ -21,7 +21,7 @@ module.exports = {
     t.chk('Nach 4 Codes: Login pausiert', await t.warteBis(async () => /Start drücken/.test(await t.status('alpha')), 200000), await t.status('alpha'))
     t.chk('...auch für die zweite Verbindung', await t.warteBis(async () => /Start drücken/.test(await lobbyStatus()), 60000), await lobbyStatus())
     await t.warte(120000)
-    t.chk('Kein einziger Code über die zweite Verbindung', lobby().length === 0 && !t.discord.nachrichten('MELDUNGEN').some((m) => /Lobby/.test(t.discord.text(m))) && !t.logEnthaelt(/\[alpha@lobby\] Microsoft-Login/))
+    t.chk('Kein einziger Code über die zweite Verbindung', lobby().length === 0 && !t.discord.nachrichten('MELDUNGEN').some((m) => /Lobby/.test(t.discord.text(m)) && !/AFK-Manager gestartet/.test(t.discord.text(m))) && !t.logEnthaelt(/\[alpha@lobby\] Microsoft-Login/))
     await t.api('POST', '/api/start/alpha%40lobby')
     t.chk('Start bei der zweiten Verbindung hebt die Pause auf', await t.warteBis(() => lobby().length === 1, 30000))
     lobby()[0].einloggen()

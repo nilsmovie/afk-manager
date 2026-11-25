@@ -21,7 +21,9 @@ module.exports = {
       }
     }
     t.chk('Start: alle verbinden', await t.alleEinloggenBis(async () => (await status('alpha@lobby')) === 'online' && (await status('bravo')) === 'online', 200000))
-    t.chk('Nach dem Start: "Alle wieder online" für beide Server', await t.warteBis(() => meldungen().some((m) => /Alle Accounts wieder online \d/.test(m)) && meldungen().some((m) => /Alle Accounts wieder online \(Lobby\)/.test(m)), 5000), meldungen())
+    // Nach dem Start: kein "Alle wieder online" pro Server, die Start-Meldung wird bearbeitet
+    t.chk('Nach dem Start: Start-Meldung zeigt "alle Accounts online" mit beiden Servern', await t.warteBis(() => meldungen().some((m) => /AFK-Manager gestartet – alle Accounts online/.test(m) && /✅ \*\*mc\.test\*\*: 2\/2 online/.test(m) && /✅ \*\*Lobby\*\*: 1\/1 online/.test(m)), 30000), meldungen())
+    t.chk('Nach dem Start: keine einzelnen "Alle wieder online"', !meldungen().some((m) => /Alle Accounts wieder online/.test(m)), meldungen())
 
     // !mc / !stop / !start mit @
     let b = t.discord.befehl('!mc alpha@lobby /lobby')
@@ -102,20 +104,20 @@ module.exports = {
     await t.alleEinloggenBis(async () => (await status('bravo')) === 'online', 200000)
     await t.warte(5000)
     t.chk('Kurzer Ausfall eines Accounts: kein "Alle wieder online"', !meldungen().slice(v).some((m) => /Alle Accounts wieder online/.test(m)), meldungen().slice(v))
-    // ...aber nach einem längeren Ausfall (über 10 Minuten) schon
+    // ...aber nach einem längeren Ausfall (über 10 Minuten) schon. Selbst gestoppt zählt nicht als
+    // Ausfall - hier kommt bravo 11 Minuten lang nicht wieder auf den Server.
     v = meldungen().length
-    t.discord.befehl('!stop bravo')
+    bot('mc.test', 'bravo').trennen()
     await t.warte(11 * 60 * 1000)
-    t.discord.befehl('!start bravo')
     await t.alleEinloggenBis(async () => (await status('bravo')) === 'online', 200000)
-    t.chk('Langer Ausfall: "Alle wieder online"', await t.warteBis(() => meldungen().slice(v).some((m) => /Alle Accounts wieder online \d/.test(m)), 5000), meldungen().slice(v))
+    t.chk('Langer Ausfall: "Alle wieder online (mc.test)" - auch beim Standardserver mit Namen', await t.warteBis(() => meldungen().slice(v).some((m) => /Alle Accounts wieder online \(mc\.test\) \d/.test(m)), 5000), meldungen().slice(v))
 
     // Alle offline pro Server: Lobby stoppen -> "Alle Accounts offline (Lobby)", Standardserver bleibt ruhig
     v = meldungen().length
     t.discord.befehl('!stop alpha@lobby')
     t.discord.befehl('!stop bravo@lobby')
     t.chk('"Alle offline (Lobby)"', await t.warteBis(() => meldungen().slice(v).some((m) => /Alle Accounts offline \(Lobby\)/.test(m)), 5000), meldungen().slice(v))
-    t.chk('Kein "Alle offline" für den Standardserver', !meldungen().slice(v).some((m) => /Alle Accounts offline Kein Account ist gerade mit dem Server/.test(m)))
+    t.chk('Kein "Alle offline" für den Standardserver', !meldungen().slice(v).some((m) => /Alle Accounts offline \(mc\.test\)/.test(m)))
     t.discord.befehl('!start alpha@lobby')
     t.discord.befehl('!start bravo@lobby')
     t.chk('Danach "Alle wieder online (Lobby)"', await t.alleEinloggenBis(() => meldungen().slice(v).some((m) => /Alle Accounts wieder online \(Lobby\)/.test(m)), 200000))
