@@ -1,5 +1,16 @@
 # Änderungen
 
+## Handy: Karten wieder mittig (November 2026)
+
+- Auf dem Handy standen die Karten rechts über den Bildschirmrand, links war eine Lücke. Schuld
+  war eine Server-Zeile („Steal a Spawner · CHAT-QUELLE · ⏱ 1 · online“), die in einem Stück
+  breiter war als die Karte und so die ganze Spalte breiter gemacht hat. Die Spalte richtet sich
+  jetzt nach dem Bildschirm, und wird es eng, kürzt sich zuerst der Servername – der Status bleibt
+  lesbar.
+- Die Online-Zeit einer Server-Zeile steht jetzt rechts neben ihrem Balken (wie beim Account),
+  damit die Knöpfe darunter in eine Reihe passen. Auf ganz schmalen Handys rutschen die Symbole in
+  eine zweite Reihe statt aus der Karte.
+
 ## Start-Meldung mit Fortschritt, Servername überall (November 2026)
 
 - Nach einem Neustart des Managers kommt nicht mehr für jeden Server einzeln „Alle Accounts
