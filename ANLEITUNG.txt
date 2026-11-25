@@ -395,11 +395,19 @@ b) Bot (für Befehle und Buttons):
       !add Name                 Account hinzufügen
    Weitere Server: Account@kürzel bzw. Account@alle (siehe Abschnitt 5b).
 
-   "Alle Accounts wieder online" kommt nur nach einem echten Ausfall: nach
-   "Alle offline", nach einem Server-Neustart (Massen-Kick), nach dem Start des
-   Managers oder wenn ein Account länger als 10 Minuten weg war. Fliegt nur ein
-   Account kurz raus und ist gleich wieder da, kommt keine Meldung.
-   Einstellbar: DISCORD_ALL_ONLINE_AFTER_MIN=10 in der .env.
+   "Alle Accounts wieder online (Server)" kommt nur nach einem echten Ausfall:
+   nach "Alle offline", nach einem Server-Neustart (Massen-Kick) oder wenn ein
+   Account länger als 10 Minuten weg war. Fliegt nur ein Account kurz raus und
+   ist gleich wieder da, kommt keine Meldung. Selbst gestoppte Accounts zählen
+   nicht mit. Einstellbar: DISCORD_ALL_ONLINE_AFTER_MIN=10 in der .env.
+   In Klammern steht immer der Server - auch beim Standardserver (dessen Name
+   ist DASHBOARD_TITLE, sonst die Adresse aus MC_SERVER_HOST).
+
+   Nach dem Start des Managers kommt stattdessen EINE Meldung "AFK-Manager
+   gestartet", die sich selbst aktualisiert: pro Server, wie viele Accounts
+   schon online sind, und am Ende "alle Accounts online". Sind nach 20 Minuten
+   nicht alle da, steht dort, wer fehlt; für diesen Server kommt dann später
+   das normale "Alle Accounts wieder online".
 
    Klappt ein Klick auf einen Discord-Knopf nicht, steht der Grund im Log
    (Zeile mit [Diagnose]): "kam zu spät an" = Programm war ausgelastet, einfach

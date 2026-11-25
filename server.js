@@ -2285,7 +2285,7 @@ function flushKickBatch(sid) {
   b.list = [];
   if (batch.length === 0) return;
   const sv = getServer(sid);
-  const where = sid === DEFAULT_SERVER_ID || !sv ? '' : ` (${sv.name})`;
+  const where = !sv ? '' : ` (${sv.name})`;
 
   if (batch.length > 1) {
     // Mehrere gleichzeitig -> eine gemeinsame Nachricht statt Einzelspam
@@ -2582,6 +2582,191 @@ function accountListForClient(viewerUser) {
   }));
 }
 
+// ---------- Start-Meldung mit Fortschritt ----------
+// Nach einem Neustart des Managers kommt nicht fuer jeden Server einzeln "Alle Accounts wieder
+// online". Stattdessen wird die Meldung "AFK-Manager gestartet" laufend bearbeitet: pro Server,
+// wie viele Accounts schon online sind - und am Ende "alle Accounts online". Sind nach
+// STARTUP_REPORT_MAX_MS noch nicht alle da, steht drin, wer fehlt; fuer diese Server kommt dann
+// spaeter wie gewohnt "Alle Accounts wieder online (Server)". Gestoppte Verbindungen zaehlen nicht.
+const STARTUP_REPORT_MAX_MS = 20 * 60 * 1000;
+const STARTUP_EDIT_GAP_MS = 15 * 1000;   // Discord nicht mit Bearbeitungen ueberhaeufen
+const startupReport = {
+  active: false,      // Accounts verbinden noch
+  result: null,       // null = laeuft, 'ok' = alle online, 'timeout' = nicht alle in der Zeit
+  startedAt: 0,
+  startedIso: null,
+  finishedAt: 0,
+  intro: '',
+  msg: null,          // Discord-Nachricht des Bots (zum Bearbeiten); null = Webhook/kein Discord
+  msgSettled: false,  // Start-Meldung ist raus (oder ging nicht)
+  done: {},           // serverId -> { total, at }: alle aktiven Accounts dieses Servers waren online
+  timeoutTimer: null,
+  editTimer: null,
+  editing: false,
+  editAgain: false,
+  editFails: 0,
+  lastEditAt: 0,
+  lastEmbedJson: '',
+  fallbackSent: false,
+};
+
+const discordMd = (text) => String(text).replace(/([\\*_~`|>])/g, '\\$1');
+const minutesText = (ms) => (ms < 60 * 1000 ? 'unter 1 Min.' : `${Math.round(ms / 60000)} Min.`);
+
+// Stand pro Server (nur Server mit Verbindungen; vom Benutzer gestoppte zaehlen nicht mit)
+function startupServerStates() {
+  const out = [];
+  for (const sv of servers) {
+    const keys = allConnKeys().filter((k) => connServerId(k) === sv.id);
+    if (!keys.length) continue;
+    const active = keys.filter((k) => !(connSettings(k) || {}).stopped);
+    const isOnline = (k) => bots[k] && bots[k].status === 'online';
+    out.push({ sv, total: active.length, online: active.filter(isOnline).length, stopped: keys.length - active.length, missing: active.filter((k) => !isOnline(k)) });
+  }
+  return out;
+}
+
+function startupEmbed() {
+  const r = startupReport;
+  const base = { timestamp: r.startedIso || new Date().toISOString() };
+  if (!r.active && !r.result) return { ...base, title: '🟢 AFK-Manager gestartet', description: r.intro, color: DISCORD_COLOR_OK };
+  const states = startupServerStates();
+  const lines = states.map(({ sv, total, online, stopped, missing }) => {
+    const name = `**${discordMd(sv.name)}**`;
+    const extra = stopped ? ` (+${stopped} gestoppt)` : '';
+    if (total === 0) return `⏹️ ${name}: alle gestoppt`;
+    const d = r.done[sv.id];
+    if (d) return `✅ ${name}: ${d.total}/${d.total} online${extra}`;
+    if (r.result === 'timeout') {
+      const names = missing.map((k) => discordMd(connUser(k)));
+      const fehlt = names.length > 8 ? `${names.slice(0, 8).join(', ')} und ${names.length - 8} weitere` : names.join(', ');
+      return `⚠️ ${name}: ${online}/${total} online${extra} – fehlt: ${fehlt}`;
+    }
+    return `⏳ ${name}: ${online}/${total} online${extra}`;
+  });
+  const list = lines.join('\n');
+  const sumTotal = states.reduce((n, x) => n + x.total, 0);
+  const sumOnline = states.reduce((n, x) => n + (r.done[x.sv.id] ? x.total : x.online), 0);
+  if (r.result === 'ok') {
+    const aktiv = states.filter((x) => x.total > 0);
+    const wo = aktiv.length > 1 ? `auf allen ${aktiv.length} Servern` : `auf ${aktiv[0] ? aktiv[0].sv.name : 'dem Server'}`;
+    return {
+      ...base,
+      title: '🟢 AFK-Manager gestartet – alle Accounts online',
+      description: `Alle ${sumTotal} Account(s) ${wo} sind online (nach ${minutesText(r.finishedAt - r.startedAt)}).\n\n${list}`,
+      color: DISCORD_COLOR_OK,
+    };
+  }
+  if (r.result === 'timeout') {
+    return {
+      ...base,
+      title: '🟡 AFK-Manager gestartet – nicht alle online',
+      description: `Nach ${minutesText(r.finishedAt - r.startedAt)} sind ${sumOnline}/${sumTotal} Accounts online. ` +
+        'Sobald die übrigen da sind, kommt für den Server „Alle Accounts wieder online“.\n\n' + list,
+      color: DISCORD_COLOR_WARN,
+    };
+  }
+  return { ...base, title: '🟢 AFK-Manager gestartet', description: `${r.intro}\n\n${list}`, color: DISCORD_COLOR_OK };
+}
+
+function startStartupReport(intro, willStart) {
+  const r = startupReport;
+  r.intro = intro;
+  r.startedAt = Date.now();
+  r.startedIso = new Date(r.startedAt).toISOString();
+  r.active = !!willStart;
+  if (r.active) r.timeoutTimer = setTimeout(() => finishStartupReport('timeout'), STARTUP_REPORT_MAX_MS);
+  Promise.resolve(discordSend('notify', { embeds: [startupEmbed()] }))
+    .then((msg) => { r.msg = msg || null; })
+    .catch(() => { r.msg = null; })
+    .then(() => {
+      r.msgSettled = true;
+      if (r.active || r.result) scheduleStartupEdit(!r.active);
+    });
+}
+
+// Aufgerufen bei jeder Aenderung (ueber checkAllOnlineMessages)
+function updateStartupReport() {
+  const r = startupReport;
+  if (!r.active) return;
+  const states = startupServerStates();
+  for (const x of states) {
+    if (r.done[x.sv.id] || x.total === 0 || x.online < x.total) continue;
+    r.done[x.sv.id] = { total: x.total, at: Date.now() };
+    // erledigt: kein "Alle Accounts wieder online" mehr fuer diesen Start
+    const st = onlineState[x.sv.id] || (onlineState[x.sv.id] = { last: null, downSince: null, notable: true });
+    st.notable = false;
+  }
+  if (states.every((x) => x.total === 0 || r.done[x.sv.id])) finishStartupReport('ok');
+  else scheduleStartupEdit(false);
+}
+
+function finishStartupReport(result) {
+  const r = startupReport;
+  if (!r.active) return;
+  r.active = false;
+  r.result = result;
+  r.finishedAt = Date.now();
+  clearTimeout(r.timeoutTimer);
+  if (result === 'ok') {
+    console.log(`Start: alle Accounts online (nach ${minutesText(r.finishedAt - r.startedAt)})`);
+  } else {
+    const fehlt = startupServerStates().filter((x) => !r.done[x.sv.id] && x.total > 0).map((x) => `${x.sv.name}: ${x.missing.map(connUser).join(', ')}`);
+    console.log(`Start: nach ${minutesText(r.finishedAt - r.startedAt)} noch nicht alle online (${fehlt.join('; ')})`);
+  }
+  scheduleStartupEdit(true);
+}
+
+function scheduleStartupEdit(final) {
+  const r = startupReport;
+  if (!r.msgSettled) return; // Start-Meldung noch unterwegs - danach wird nachgezogen
+  if (!r.msg) {
+    // per Webhook gesendet (nicht bearbeitbar): am Ende EINE Meldung fuer alle Server
+    if (final && !r.fallbackSent && r.result) {
+      r.fallbackSent = true;
+      sendDiscordEmbed(startupEmbed());
+    }
+    return;
+  }
+  if (r.editTimer) {
+    if (!final) return;
+    clearTimeout(r.editTimer);
+    r.editTimer = null;
+  }
+  const wait = final ? 0 : Math.max(0, r.lastEditAt + STARTUP_EDIT_GAP_MS - Date.now());
+  r.editTimer = setTimeout(() => {
+    r.editTimer = null;
+    doStartupEdit();
+  }, wait);
+}
+
+async function doStartupEdit() {
+  const r = startupReport;
+  if (!r.msg) return;
+  if (r.editing) { r.editAgain = true; return; }
+  const embed = startupEmbed();
+  const json = JSON.stringify(embed);
+  if (json === r.lastEmbedJson) return;
+  r.editing = true;
+  r.lastEditAt = Date.now();
+  try {
+    await r.msg.edit({ embeds: [embed] });
+    r.lastEmbedJson = json;
+    r.editFails = 0;
+  } catch (e) {
+    r.editFails++;
+    console.warn(`Discord: Start-Meldung konnte nicht aktualisiert werden (${e.message})`);
+    // Endstand nicht verlieren: spaeter nochmal (z.B. wenn Discord kurz weg war)
+    if (!r.active && r.editFails <= 10) setTimeout(() => scheduleStartupEdit(true), 60 * 1000);
+  } finally {
+    r.editing = false;
+  }
+  if (r.editAgain) {
+    r.editAgain = false;
+    scheduleStartupEdit(!r.active);
+  }
+}
+
 // "Alle offline" / "Alle wieder online" pro Server. Ruhiger als frueher: "wieder online" kommt
 // nur nach einem richtigen Ausfall - nach "Alle offline", nach einem Massen-Kick (Server-Neustart),
 // nach dem Start des Managers oder wenn mindestens ein Account laenger als
@@ -2594,38 +2779,49 @@ function markNotableOutage(serverId) {
   if (st) st.notable = true;
 }
 function checkAllOnlineMessages() {
+  // Server, die noch im Start-Bericht stecken, bekommen kein eigenes "Alle Accounts wieder online"
+  const coveredByStartup = {};
+  if (startupReport.active) for (const sv of servers) coveredByStartup[sv.id] = !startupReport.done[sv.id];
+  updateStartupReport();
   for (const sv of servers) {
     const keys = allConnKeys().filter((k) => connServerId(k) === sv.id);
     const total = keys.length;
-    const online = keys.filter((k) => bots[k] && bots[k].status === 'online').length;
+    const isOnline = (k) => bots[k] && bots[k].status === 'online';
+    const online = keys.filter(isOnline).length;
+    // "Alle" = alle, die laufen sollen: vom Benutzer gestoppte Verbindungen zaehlen nicht mit
+    // (sonst kaeme fuer einen Server mit einem gestoppten Account nie "Alle wieder online")
+    const active = keys.filter((k) => !(connSettings(k) || {}).stopped);
+    const activeTotal = active.length;
+    const activeOnline = active.filter(isOnline).length;
+    const stoppedCount = total - activeTotal;
     // Neu: der Start des Managers zaehlt als Ausfall (-> "Alle wieder online", sobald alle da sind)
     const st = onlineState[sv.id] || (onlineState[sv.id] = { last: null, downSince: null, notable: true });
-    const where = sv.isDefault ? '' : ` (${sv.name})`;
-    if (online < total && st.downSince === null) st.downSince = Date.now();
+    const where = ` (${sv.name})`; // auch beim Standardserver, damit klar ist, welcher gemeint ist
+    if (activeOnline < activeTotal && st.downSince === null) st.downSince = Date.now();
     if (st.last !== null && total > 0) {
       if (online === 0 && st.last > 0) {
         const causedByRecentKicks = Date.now() - (lastMassKickAt[sv.id] || 0) < KICK_BATCH_WINDOW_MS + 2000;
         if (!causedByRecentKicks) {
           sendDiscordEmbed({
             title: `🔴 Alle Accounts offline${where}`,
-            description: sv.isDefault ? 'Kein Account ist gerade mit dem Server verbunden.' : `Kein Account ist gerade mit ${sv.name} verbunden.`,
+            description: `Kein Account ist gerade mit ${sv.name} verbunden.`,
             color: DISCORD_COLOR_DANGER,
           });
         }
         st.notable = true;
-      } else if (online === total && st.last < total) {
+      } else if (activeTotal > 0 && activeOnline === activeTotal && st.last < activeTotal) {
         const longOutage = st.downSince !== null && Date.now() - st.downSince >= ALL_ONLINE_AFTER_MS;
-        if (st.notable || longOutage) {
+        if ((st.notable || longOutage) && !coveredByStartup[sv.id]) {
           sendDiscordEmbed({
             title: `🟢 Alle Accounts wieder online${where}`,
-            description: `${online}/${total} Accounts sind verbunden.`,
+            description: `${activeOnline}/${activeTotal} Accounts sind verbunden.${stoppedCount ? ` (${stoppedCount} gestoppt)` : ''}`,
             color: DISCORD_COLOR_OK,
           });
         }
         st.notable = false;
       }
     }
-    if (online === total) st.downSince = null;
+    if (activeOnline >= activeTotal) st.downSince = null;
     st.last = online;
   }
 }
@@ -5628,14 +5824,15 @@ server.listen(PORT, () => {
   else console.error('[Server] MC_SERVER_HOST fehlt in der .env - ohne Standardserver startet kein Account! Bitte eintragen und neu starten.');
   if (servers.length > 1) console.log(`Weitere Server: ${servers.filter((sv) => !sv.isDefault).map((sv) => `${sv.name} (${sv.host})`).join(', ')}`);
 
-  sendDiscordEmbed({
-    title: '🟢 AFK-Manager gestartet',
-    description: MC_SERVER_HOST
-      ? `Verbindet mit ${MC_SERVER_HOST}, ${allConnKeys().filter((k) => !(connSettings(k) || {}).stopped).length} Account(s) werden automatisch gestartet` +
+  // Start-Meldung; wird bearbeitet, bis alle Accounts online sind (siehe startupReport)
+  const autoStartCount = allConnKeys().filter((k) => !(connSettings(k) || {}).stopped).length;
+  startStartupReport(
+    MC_SERVER_HOST
+      ? `Verbindet mit ${MC_SERVER_HOST}, ${autoStartCount} Account(s) werden automatisch gestartet` +
         `${allConnKeys().some((k) => (connSettings(k) || {}).stopped) ? `, ${allConnKeys().filter((k) => (connSettings(k) || {}).stopped).length} bleiben gestoppt` : ''}.`
       : 'MC_SERVER_HOST fehlt in der .env - es startet kein Account.',
-    color: DISCORD_COLOR_OK,
-  });
+    !!MC_SERVER_HOST && autoStartCount > 0
+  );
 
   // Alle gespeicherten Accounts automatisch starten (z.B. nach Stromausfall/Neustart via pm2).
   // Laeuft ueber die Reconnect-Warteschlange, damit sie nacheinander statt gleichzeitig
