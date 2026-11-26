@@ -736,19 +736,28 @@ function renderServers() {
     row.className = 'user-row';
     row.innerHTML = `
       <div class="user-info">
-        <span class="user-name">${escapeHtml(sv.name)} <span class="srv-id">@${escapeHtml(sv.id)}</span></span>
-        ${sv.isDefault ? '<span class="srv-badge">Standardserver (aus der .env)</span>' : ''}
+        <span class="user-name">${escapeHtml(sv.name)} <span class="srv-id">@${escapeHtml(sv.tag || sv.id)}</span></span>
+        ${sv.isDefault ? '<span class="srv-badge">Standardserver</span>' : ''}
         <span class="allowed-list">${escapeHtml(sv.host || '(keine Adresse – MC_SERVER_HOST in der .env fehlt)')} · Java ${escapeHtml(portText(sv.javaPort))} · Bedrock ${escapeHtml(portText(sv.bedrockPort))}</span>
         <span class="allowed-list">${escapeHtml(count)}${tpl.length ? ` · Auto-Chat-Vorlage: ${tpl.length} ${tpl.length === 1 ? 'Eintrag' : 'Einträge'}` : ''}</span>
       </div>
       <div class="user-actions">
-        <button class="small ghost" onclick="toggleServerEdit(${jsArg(sv.id)})">${sv.isDefault ? 'Vorlage' : 'Bearbeiten'}</button>
+        <button class="small ghost" onclick="toggleServerEdit(${jsArg(sv.id)})">Bearbeiten</button>
         ${sv.isDefault ? '' : `<button class="small danger" onclick="deleteServer(${jsArg(sv.id)})">Löschen</button>`}
       </div>
       <div class="edit-panel${openServerPanels.has(sv.id) ? ' open' : ''}" id="srvEdit-${i}">
         <div class="error-msg" id="srvError-${i}"></div>
         <div class="success-msg" id="srvSuccess-${i}"></div>
-        ${sv.isDefault ? '' : `
+        ${sv.isDefault ? `
+          <div class="panel-title">Server</div>
+          <label class="field-label">Name</label>
+          <input id="srvEditName-${i}" maxlength="32" value="${escapeHtml(sv.name)}" autocomplete="off" />
+          <label class="field-label">Kürzel für Discord – z.B. <code>!start Name@${escapeHtml(sv.tag || sv.id)}</code> (ohne @ ist immer dieser Server gemeint)</label>
+          <input id="srvEditId-${i}" maxlength="24" value="${escapeHtml(sv.tag || sv.id)}" autocomplete="off" spellcheck="false" />
+          <span class="sub">Name und Kürzel gelten sofort, die Accounts laufen einfach weiter.
+            Adresse und Ports kommen aus der .env (MC_SERVER_HOST, MC_SERVER_PORT, MC_BEDROCK_PORT).</span><br />
+          <button class="small" style="margin-top:8px" onclick="saveServer(${jsArg(sv.id)}, ${i})">Speichern</button>
+        ` : `
           <div class="panel-title">Server</div>
           <label class="field-label">Name</label>
           <input id="srvEditName-${i}" maxlength="32" value="${escapeHtml(sv.name)}" autocomplete="off" />
@@ -769,7 +778,7 @@ function renderServers() {
           <span class="sub">Neue Adresse/Ports gelten ab der nächsten Verbindung. Ein neues Kürzel gilt sofort; laufende Verbindungen auf diesem Server werden dafür kurz neu gestartet.</span><br />
           <button class="small" style="margin-top:8px" onclick="saveServer(${jsArg(sv.id)}, ${i})">Speichern</button>
         `}
-        <div class="panel-title" style="margin-top:${sv.isDefault ? '0' : '16px'}">Auto-Chat-Vorlage</div>
+        <div class="panel-title" style="margin-top:16px">Auto-Chat-Vorlage</div>
         <span class="sub">${sv.isDefault ? 'Neue Accounts' : 'Neue Verbindungen zu diesem Server'} bekommen diese Befehle als Auto-Chat
           (Wartezeit in Sekunden nach dem Einloggen). Bestehende bleiben unverändert.</span>
         <div class="tpl-list">
@@ -828,6 +837,18 @@ async function saveServer(id, i) {
   err.textContent = '';
   const newId = document.getElementById(`srvEditId-${i}`).value.trim().toLowerCase();
   const sv = allServers.find((x) => x.id === id);
+  if (sv && sv.isDefault) {
+    // Standardserver: nur Name und Kürzel, nichts startet neu
+    const r = await sendJson('PUT', `/api/servers/${encodeURIComponent(id)}`, {
+      name: document.getElementById(`srvEditName-${i}`).value,
+      id: newId,
+    });
+    if (!r.ok) { err.textContent = r.data.error || 'Fehler beim Speichern'; return; }
+    await loadServers();
+    const ok = document.getElementById(`srvSuccess-${allServers.findIndex((x) => x.id === id)}`);
+    if (ok) ok.textContent = 'Gespeichert.';
+    return;
+  }
   if (newId && newId !== id && sv && sv.connections > 0) {
     const confirmed = await showConfirm(
       `Kürzel von @${id} auf @${newId} ändern? Die ${sv.connections === 1 ? 'Verbindung' : `${sv.connections} Verbindungen`} auf diesem Server ${sv.connections === 1 ? 'wird' : 'werden'} dafür kurz neu gestartet. In Discord heißt es danach Name@${newId}.`,

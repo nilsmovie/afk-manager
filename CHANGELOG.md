@@ -1,5 +1,16 @@
 # Änderungen
 
+## Standardserver: Name und Kürzel änderbar (November 2026)
+
+- In der Verwaltung hat der Standardserver jetzt auch „Bearbeiten“: Name (z.B. „ClashSMP“ statt
+  der Adresse) und Kürzel für Discord (z.B. `!start NilsMovie@clash`). Beides gilt sofort,
+  die Accounts laufen einfach weiter (intern bleibt er „standard“, `Name@standard` geht weiter).
+- Überall, wo bei anderen Servern der Name steht, steht damit auch beim Standardserver der Name:
+  Server-Übersicht im Dashboard, Discord-Meldungen („Alle Accounts wieder online (ClashSMP)“),
+  Start-Meldung, Seitentitel und „Hauptserver: ClashSMP (clashsmp.de)“.
+- Adresse und Ports des Standardservers bleiben in der .env. Gespeichert wird in `servers.json`;
+  Name wie in der .env und Kürzel „standard“ setzen es zurück.
+
 ## Handy: Karten wieder mittig (November 2026)
 
 - Auf dem Handy standen die Karten rechts über den Bildschirmrand, links war eine Lücke. Schuld
