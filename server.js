@@ -503,17 +503,23 @@ app.use(checkAuth);
 app.use(express.json());
 
 // Die HTML-Seiten enthalten Platzhalter fuer den Servernamen, die hier ersetzt werden
-const PAGE_VALUES = {
-  '{{TITEL}}': htmlText(DASHBOARD_TITLE),
-  '{{SERVER}}': htmlText(MC_SERVER_HOST),
-};
+// (dynamisch: Name des Standardservers laesst sich in der Verwaltung aendern)
+function pageValues() {
+  const name = defaultServer.name;
+  const host = defaultServer.host;
+  return {
+    // Seitentitel: DASHBOARD_TITLE aus der .env, sonst der Name des Standardservers
+    '{{TITEL}}': htmlText(process.env.DASHBOARD_TITLE ? DASHBOARD_TITLE : name),
+    '{{SERVER}}': htmlText(host && name.toLowerCase() !== host.toLowerCase() ? `${name} (${host})` : (host || name)),
+  };
+}
 function htmlText(v) {
   return String(v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 function sendPage(res, file) {
   fs.readFile(file, 'utf8', (err, html) => {
     if (err) return res.status(500).send('Seite fehlt: ' + path.basename(file));
-    for (const [key, value] of Object.entries(PAGE_VALUES)) html = html.split(key).join(value);
+    for (const [key, value] of Object.entries(pageValues())) html = html.split(key).join(value);
     res.type('html').set('Cache-Control', 'no-cache').send(html);
   });
 }
@@ -1052,7 +1058,8 @@ function validateServerInput(body, { others, existing = null }) {
   if (others.some((o) => o.name.toLowerCase() === name.toLowerCase())) return { error: 'Einen Server mit diesem Namen gibt es schon' };
 
   let id = existing ? existing.id : cleanText(b.id).toLowerCase();
-  const taken = new Set(others.map((o) => o.id));
+  // vergeben: Kuerzel aller anderen Server (beim Standardserver auch sein selbst gewaehltes)
+  const taken = new Set(others.flatMap((o) => [o.id, o.tag].filter(Boolean)));
   if (!existing) {
     if (!id) id = serverIdFromName(name, taken);
     if (!SERVER_ID_RE.test(id)) return { error: 'Kürzel: 1-24 Zeichen, nur a-z, 0-9 und - (nicht am Anfang/Ende)' };
@@ -1085,8 +1092,21 @@ function validateServerInput(body, { others, existing = null }) {
   };
 }
 
+// Name und Kuerzel des Standardservers aus servers.json (in der Verwaltung geaendert)
+function cleanDefaultServerFields(raw) {
+  const out = { name: null, tag: null };
+  if (!raw || typeof raw !== 'object') return out;
+  const name = cleanText(raw.name);
+  if (name && SERVER_NAME_RE.test(name)) out.name = name;
+  else if (name) console.warn(`[Server] Name des Standardservers in servers.json ungültig, nehme den aus der .env: ${JSON.stringify(raw.name).slice(0, 60)}`);
+  const tag = cleanText(raw.tag).toLowerCase();
+  if (tag && SERVER_ID_RE.test(tag) && !RESERVED_SERVER_IDS.has(tag)) out.tag = tag;
+  else if (tag) console.warn(`[Server] Kürzel des Standardservers in servers.json ungültig, nehme "standard": ${JSON.stringify(raw.tag).slice(0, 40)}`);
+  return out;
+}
+
 function loadServerFile() {
-  const empty = { defaultTemplate: [], servers: [] };
+  const empty = { defaultTemplate: [], defaultName: null, defaultTag: null, servers: [] };
   for (const file of [SERVERS_FILE, SERVERS_BACKUP_FILE]) {
     if (!fs.existsSync(file)) continue;
     try {
@@ -1094,7 +1114,8 @@ function loadServerFile() {
       if (!raw || typeof raw !== 'object' || !Array.isArray(raw.servers)) continue;
       if (file === SERVERS_BACKUP_FILE) console.warn('[Server] servers.json nicht lesbar - Sicherung wird verwendet!');
       const list = [];
-      const others = [{ id: DEFAULT_SERVER_ID, name: DASHBOARD_TITLE, host: MC_SERVER_HOST.toLowerCase(), javaPort: MC_SERVER_PORT, bedrockPort: MC_BEDROCK_PORT }];
+      const def = cleanDefaultServerFields(raw.defaultServer);
+      const others = [{ id: DEFAULT_SERVER_ID, tag: def.tag, name: def.name || DASHBOARD_TITLE, host: MC_SERVER_HOST.toLowerCase(), javaPort: MC_SERVER_PORT, bedrockPort: MC_BEDROCK_PORT }];
       for (const entry of raw.servers) {
         if (!entry || typeof entry !== 'object') continue;
         const r = validateServerInput({ ...entry, id: entry && entry.id }, { others: [...others, ...list] });
@@ -1110,6 +1131,8 @@ function loadServerFile() {
       }
       return {
         defaultTemplate: cleanTemplate(raw.defaultServer && raw.defaultServer.autoChatTemplate),
+        defaultName: def.name,
+        defaultTag: def.tag,
         servers: list.slice(0, MAX_EXTRA_SERVERS),
       };
     } catch (e) {
@@ -1122,7 +1145,12 @@ function loadServerFile() {
 function saveServers() {
   const data = JSON.stringify({
     version: 1,
-    defaultServer: { autoChatTemplate: defaultServer.autoChatTemplate || [] },
+    defaultServer: {
+      // Name/Kuerzel nur, wenn in der Verwaltung geaendert (sonst gilt die .env)
+      ...(defaultServer.customName ? { name: defaultServer.customName } : {}),
+      ...(defaultServer.tag ? { tag: defaultServer.tag } : {}),
+      autoChatTemplate: defaultServer.autoChatTemplate || [],
+    },
     servers: servers.filter((sv) => !sv.isDefault).map((sv) => ({
       id: sv.id,
       name: sv.name,
@@ -1152,9 +1180,14 @@ backupAccountsBeforeMultiServer();
 // Accountnamen enthalten nie ein "@" (siehe ACCOUNT_NAME_RE), der Schluessel ist also eindeutig.
 // Der Microsoft-Login (authCacheId) gehoert dem Account und wird von allen seinen
 // Verbindungen geteilt; die Warteschlange (eine Verbindung nach der anderen) gilt fuer alle.
+// Intern heisst der Standardserver immer "standard" (Schluessel, Chat, Statistik haengen daran).
+// Name und Kuerzel fuer Discord ("tag") lassen sich in der Verwaltung aendern; die Adresse und
+// die Ports kommen aus der .env.
 const DEFAULT_SERVER_ID = 'standard';
 const defaultServer = {
   id: DEFAULT_SERVER_ID,
+  tag: null,          // selbst gewaehltes Kuerzel (z.B. "clash"), sonst "standard"
+  customName: null,   // in der Verwaltung gesetzter Name, sonst DASHBOARD_TITLE / MC_SERVER_HOST
   name: DASHBOARD_TITLE,
   host: MC_SERVER_HOST,
   javaPort: MC_SERVER_PORT,
@@ -1164,6 +1197,9 @@ const defaultServer = {
 // Weitere Server (servers.json) + Auto-Chat-Vorlagen; siehe "Serverliste" weiter unten
 const serverFile = loadServerFile();
 defaultServer.autoChatTemplate = serverFile.defaultTemplate;
+defaultServer.customName = serverFile.defaultName || null;
+defaultServer.tag = serverFile.defaultTag || null;
+if (defaultServer.customName) defaultServer.name = defaultServer.customName;
 let servers = [defaultServer, ...serverFile.servers];
 // Verbindungen zu weiteren Servern: [{ username, server, everJoined, autoChat, ... }]
 // (verbindungen.json - aeltere Versionen kennen die Datei nicht und ignorieren sie)
@@ -4140,6 +4176,7 @@ function serverForClient(sv, viewer) {
     javaPort: sv.javaPort,
     bedrockPort: sv.bedrockPort,
     isDefault: !!sv.isDefault,
+    tag: sv.tag || sv.id, // Kuerzel fuer Discord ("Name@tag")
   };
   if (viewer && viewer.role !== 'user') {
     out.autoChatTemplate = sv.autoChatTemplate || [];
@@ -4226,12 +4263,51 @@ function renameServerId(sv, newId) {
   return { connections: keys.length, restarted: restart.length };
 }
 
+// Standardserver: Name und Kuerzel aenderbar. Intern bleibt er "standard" - die Verbindungen
+// heissen weiter nur "Name", deshalb muss (anders als bei weiteren Servern) nichts neu starten.
+// Adresse und Ports kommen aus der .env.
+function updateDefaultServer(req, res, sv) {
+  const b = req.body || {};
+  for (const [field, current] of [['host', sv.host], ['javaPort', sv.javaPort], ['bedrockPort', sv.bedrockPort]]) {
+    if (b[field] === undefined || b[field] === null || b[field] === '') continue;
+    const same = field === 'host' ? normalizeHost(b[field]) === String(current || '').toLowerCase() : parsePort(b[field]).value === current;
+    if (!same) return res.status(400).json({ error: 'Adresse und Ports des Standardservers stehen in der .env (MC_SERVER_HOST, MC_SERVER_PORT, MC_BEDROCK_PORT).' });
+  }
+  if (b.name !== undefined && typeof b.name !== 'string') return res.status(400).json({ error: 'Ungültiger Name' });
+  if (b.id !== undefined && b.id !== null && typeof b.id !== 'string') return res.status(400).json({ error: 'Ungültiges Kürzel' });
+  const name = b.name === undefined ? sv.name : cleanText(b.name);
+  if (!name) return res.status(400).json({ error: 'Name fehlt' });
+  if (!SERVER_NAME_RE.test(name)) return res.status(400).json({ error: 'Name: 1-32 Zeichen, Buchstaben, Ziffern, Leerzeichen und . _ # ( ) + -' });
+  if (servers.some((o) => o !== sv && o.name.toLowerCase() === name.toLowerCase())) return res.status(400).json({ error: 'Einen Server mit diesem Namen gibt es schon' });
+  // Kuerzel: leer oder "standard" = kein eigenes
+  let tag = b.id === undefined || b.id === null ? sv.tag : cleanText(b.id).toLowerCase();
+  if (!tag || tag === DEFAULT_SERVER_ID) tag = null;
+  if (tag) {
+    if (!SERVER_ID_RE.test(tag)) return res.status(400).json({ error: 'Kürzel: 1-24 Zeichen, nur a-z, 0-9 und - (nicht am Anfang/Ende)' });
+    if (RESERVED_SERVER_IDS.has(tag)) return res.status(400).json({ error: `Das Kürzel "${tag}" ist reserviert` });
+    if (servers.some((o) => o !== sv && o.id === tag)) return res.status(400).json({ error: 'Dieses Kürzel ist schon vergeben' });
+  }
+  const before = { name: sv.name, tag: sv.tag || DEFAULT_SERVER_ID };
+  // Name wie in der .env -> nichts Eigenes speichern (dann gilt wieder die .env)
+  sv.customName = name === DASHBOARD_TITLE ? null : name;
+  sv.name = name;
+  sv.tag = tag;
+  const after = { name: sv.name, tag: sv.tag || DEFAULT_SERVER_ID };
+  if (before.name === after.name && before.tag === after.tag) return res.json({ ok: true, server: serverForClient(sv, req.user) });
+  saveServers();
+  broadcastAccountList();
+  io.emit('servers-changed');
+  const parts = [];
+  if (before.tag !== after.tag) parts.push(`Kürzel @${before.tag} → @${after.tag}`);
+  if (before.name !== after.name) parts.push(`Name "${before.name}" → "${after.name}"`);
+  auditServer(req, 'Server geändert', sv, parts.join('; '));
+  res.json({ ok: true, server: serverForClient(sv, req.user) });
+}
+
 app.put('/api/servers/:id', requireManageRights, (req, res) => {
   const sv = getServer(String(req.params.id));
   if (!sv) return res.status(404).json({ error: 'Server nicht gefunden' });
-  if (sv.isDefault) {
-    return res.status(400).json({ error: 'Der Standardserver kommt aus der .env (MC_SERVER_HOST, MC_SERVER_PORT, MC_BEDROCK_PORT) und lässt sich hier nicht ändern.' });
-  }
+  if (sv.isDefault) return updateDefaultServer(req, res, sv);
   const r = validateServerInput(req.body, { others: servers.filter((o) => o !== sv), existing: sv });
   if (r.error) return res.status(400).json({ error: r.error });
   // Neues Kuerzel (optional)
@@ -4241,7 +4317,7 @@ app.put('/api/servers/:id', requireManageRights, (req, res) => {
   if (wantId !== sv.id) {
     if (!SERVER_ID_RE.test(wantId)) return res.status(400).json({ error: 'Kürzel: 1-24 Zeichen, nur a-z, 0-9 und - (nicht am Anfang/Ende)' });
     if (RESERVED_SERVER_IDS.has(wantId)) return res.status(400).json({ error: `Das Kürzel "${wantId}" ist reserviert` });
-    if (servers.some((o) => o !== sv && o.id === wantId)) return res.status(400).json({ error: 'Dieses Kürzel ist schon vergeben' });
+    if (servers.some((o) => o !== sv && (o.id === wantId || o.tag === wantId))) return res.status(400).json({ error: 'Dieses Kürzel ist schon vergeben' });
   }
   // Ports, die bestehende Verbindungen brauchen, duerfen nicht verschwinden
   const here = extraConnections.filter((c) => c.server === sv.id);
@@ -5335,7 +5411,7 @@ if (DISCORD_BOT_TOKEN && DISCORD_CHANNEL_ID) {
   const findServerByText = (text) => {
     const x = String(text || '').trim().toLowerCase();
     if (!x) return null;
-    return servers.find((sv) => sv.id === x) || servers.find((sv) => sv.name.toLowerCase() === x) || null;
+    return servers.find((sv) => sv.id === x || sv.tag === x) || servers.find((sv) => sv.name.toLowerCase() === x) || null;
   };
   const resolveTarget = (text) => {
     const raw = String(text || '').trim();
@@ -5348,14 +5424,15 @@ if (DISCORD_BOT_TOKEN && DISCORD_CHANNEL_ID) {
     if (/^(alle|all)$/i.test(serverPart)) return { keys: connKeysOfAccount(account.username), account, all: true };
     const sv = findServerByText(serverPart);
     if (!sv) {
-      return { error: `Unbekannter Server "${serverPart}". Server: ${servers.map((x) => `\`${x.id}\``).join(', ')}` };
+      return { error: `Unbekannter Server "${serverPart}". Server: ${servers.map((x) => `\`${x.tag || x.id}\``).join(', ')}` };
     }
     const key = connKey(account.username, sv.id);
     if (!connectionExists(key)) return { error: `${account.username} ist nicht auf ${sv.name}.`, account, server: sv };
     return { keys: [key], account, server: sv };
   };
   const accountsHint = () => `Bekannte Accounts: ${accounts.map((a) => a.username).join(', ') || '(keine)'}` +
-    (servers.length > 1 ? `\nWeitere Server: ${servers.filter((sv) => !sv.isDefault).map((sv) => `\`@${sv.id}\``).join(', ')} (z.B. \`Name@${servers[1].id}\`, \`Name@alle\`)` : '');
+    (servers.length > 1 ? `\nWeitere Server: ${servers.filter((sv) => !sv.isDefault).map((sv) => `\`@${sv.id}\``).join(', ')} (z.B. \`Name@${servers[1].id}\`, \`Name@alle\`)` +
+      (defaultServer.tag ? ` - Standardserver: \`Name\` oder \`Name@${defaultServer.tag}\`` : '') : '');
 
   discordClient.on('messageCreate', async (message) => {
     if (message.author.bot) return;
@@ -5830,7 +5907,7 @@ server.listen(PORT, () => {
   const autoStartCount = allConnKeys().filter((k) => !(connSettings(k) || {}).stopped).length;
   startStartupReport(
     MC_SERVER_HOST
-      ? `Verbindet mit ${MC_SERVER_HOST}, ${autoStartCount} Account(s) werden automatisch gestartet` +
+      ? `Verbindet mit ${defaultServer.name.toLowerCase() === MC_SERVER_HOST.toLowerCase() ? MC_SERVER_HOST : `${defaultServer.name} (${MC_SERVER_HOST})`}, ${autoStartCount} Account(s) werden automatisch gestartet` +
         `${allConnKeys().some((k) => (connSettings(k) || {}).stopped) ? `, ${allConnKeys().filter((k) => (connSettings(k) || {}).stopped).length} bleiben gestoppt` : ''}.`
       : 'MC_SERVER_HOST fehlt in der .env - es startet kein Account.',
     !!MC_SERVER_HOST && autoStartCount > 0

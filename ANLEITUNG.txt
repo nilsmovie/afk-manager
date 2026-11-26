@@ -258,7 +258,10 @@ Server anlegen (Owner und Admins):
    Auto-Chat-Vorlage: Befehle, die jede NEUE Verbindung zu diesem Server als
    Auto-Chat bekommt (beim Standardserver: jeder neue Account). Bestehende
    bleiben unverändert.
-   Den Standardserver änderst du nur in der .env.
+   Beim Standardserver lassen sich unter "Bearbeiten" der Name (z.B. "ClashSMP"
+   statt der Adresse) und das Kürzel für Discord ändern - die Accounts laufen
+   dabei einfach weiter. Adresse und Ports des Standardservers stehen in der
+   .env (MC_SERVER_HOST, MC_SERVER_PORT, MC_BEDROCK_PORT).
 
 Account auf einen weiteren Server schicken:
    Dashboard -> beim Account "+ Server" -> Server wählen -> "Hinzufügen und
@@ -289,7 +292,8 @@ Discord: An den Accountnamen "@kürzel" hängen (oder den Servernamen):
    !start NilsMovie@lobby      !stop NilsMovie@alle (auf allen Servern)
    !mc NilsMovie@lobby hallo   !primary NilsMovie@lobby
    !add NilsMovie@lobby        (bestehenden Account zusätzlich dorthin)
-Ohne @ gilt wie bisher der Standardserver. Meldungen nennen den Server, z.B.
+Ohne @ gilt wie bisher der Standardserver (hat er ein eigenes Kürzel, geht
+auch Name@kürzel; Name@standard geht immer). Meldungen nennen den Server, z.B.
 "NilsMovie (Lobby) ist anderswo eingeloggt".
 
 Schalter in der .env:
@@ -400,8 +404,8 @@ b) Bot (für Befehle und Buttons):
    Account länger als 10 Minuten weg war. Fliegt nur ein Account kurz raus und
    ist gleich wieder da, kommt keine Meldung. Selbst gestoppte Accounts zählen
    nicht mit. Einstellbar: DISCORD_ALL_ONLINE_AFTER_MIN=10 in der .env.
-   In Klammern steht immer der Server - auch beim Standardserver (dessen Name
-   ist DASHBOARD_TITLE, sonst die Adresse aus MC_SERVER_HOST).
+   In Klammern steht immer der Server - auch beim Standardserver (dessen Namen
+   stellst du in der Verwaltung ein; sonst DASHBOARD_TITLE bzw. die Adresse).
 
    Nach dem Start des Managers kommt stattdessen EINE Meldung "AFK-Manager
    gestartet", die sich selbst aktualisiert: pro Server, wie viele Accounts
